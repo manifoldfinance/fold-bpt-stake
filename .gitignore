@@ -1,0 +1,33 @@
+# Node
+node_modules/
+
+# Yarn
+yarn-error.log
+
+# Hardhat
+cache/
+abis/
+artifacts/
+
+# Typechain
+typechain-types/
+
+# Env
+.env
+
+# Coverage
+coverage/
+coverage.json
+
+# ESLint
+.eslintcache
+
+# Dodoc
+docs/**/*
+
+# User-specific stuff
+.idea/**/workspace.xml
+.idea/**/tasks.xml
+.idea/**/usage.statistics.xml
+.idea/**/dictionaries
+.idea/**/shelf
