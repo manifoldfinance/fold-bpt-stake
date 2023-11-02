@@ -4,24 +4,38 @@ pragma solidity ^0.8.18;
 
 import "@openzeppelin/contracts/token/ERC20/extensions/ERC4626.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import "./interfaces/ICrvDepositor.sol";
+import "./interfaces/IBasicRewards.sol";
 
+// Take BPT -> Stake on Aura -> Someone need to pay to harvest rewards -> Send to treasury multisig
 contract StakedBPT is ERC4626, ReentrancyGuard {
-    address public immutable token;
+    using SafeERC20 for IERC20;
+
+    address public immutable bpt;
+    address public immutable auraBal;
+    address public immutable depositor;
+    address public immutable staking;
     uint256 public immutable minLockDuration;
 
     event Harvest(address indexed _caller, uint256 _value);
 
     constructor(
-        address _token,
+        address _depositor,
+        address _bpt,
+        address _auroBal,
+        address _staking,
         uint256 _minLockDuration
     )
+        ERC4626(IERC20(_bpt))
         ERC20(
-            string(abi.encodePacked("Staked ", ERC20(_token).name())),
-            string(abi.encodePacked("stk", ERC20(_token).symbol()))
+            string(abi.encodePacked("Staked ", ERC20(_bpt).name())),
+            string(abi.encodePacked("stk", ERC20(_bpt).symbol()))
         )
-        ERC4626(IERC20(_token))
     {
-        token = _token;
+        bpt = _bpt;
+        auraBal = _auroBal;
+        depositor = _depositor;
+        staking = _staking;
         minLockDuration = _minLockDuration;
     }
 
@@ -44,7 +58,14 @@ contract StakedBPT is ERC4626, ReentrancyGuard {
     }
 
     function _deposit(address caller, address receiver, uint256 assets, uint256 shares) internal override {
-        // TODO: stake into aura
+        IERC20(bpt).safeTransferFrom(receiver, address(this), assets);
+
+        uint256 amountBPT = IERC20(bpt).balanceOf(address(this));
+        IERC20(bpt).approve(depositor, amountBPT);
+        ICrvDepositor(depositor).deposit(amountBPT, true);
+
+        uint256 amountAuraBal = IERC20(auraBal).balanceOf(address(this));
+        IBasicRewards(staking).stake(amountAuraBal);
 
         return super._deposit(caller, receiver, assets, shares);
     }
