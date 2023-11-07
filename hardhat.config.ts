@@ -1,28 +1,28 @@
-import "dotenv/config";
-import "@lz-kit/cli/hardhat";
-import "@nomiclabs/hardhat-solhint";
-import "@nomicfoundation/hardhat-toolbox";
-import "hardhat-abi-exporter";
-import "hardhat-deploy";
-import "hardhat-spdx-license-identifier";
-import "hardhat-watcher";
-import "@primitivefi/hardhat-dodoc";
+import "dotenv/config"
+import "@lz-kit/cli/hardhat"
+import "@nomiclabs/hardhat-solhint"
+import "@nomicfoundation/hardhat-toolbox"
+import "hardhat-abi-exporter"
+import "hardhat-deploy"
+import "hardhat-spdx-license-identifier"
+import "hardhat-watcher"
+import "@primitivefi/hardhat-dodoc"
 
-import { HardhatUserConfig, task } from "hardhat/config";
+import { HardhatUserConfig, task } from "hardhat/config"
 
-import { removeConsoleLog } from "hardhat-preprocessor";
+import { removeConsoleLog } from "hardhat-preprocessor"
 
-const accounts = { mnemonic: process.env.MNEMONIC || "test test test test test test test test test test test junk" };
+const accounts = { mnemonic: process.env.MNEMONIC || "test test test test test test test test test test test junk" }
 
 // This is a sample Hardhat task. To learn how to create your own go to
 // https://hardhat.org/guides/create-task.html
 task("accounts", "Prints the list of accounts", async (args, { ethers }) => {
-    const accounts = await ethers.getSigners();
+    const accounts = await ethers.getSigners()
 
     for (const account of accounts) {
-        console.log(await account.address);
+        console.log(await account.address)
     }
-});
+})
 
 const config: HardhatUserConfig = {
     abiExporter: {
@@ -211,8 +211,8 @@ const config: HardhatUserConfig = {
             runOnLaunch: true,
         },
     },
-};
+}
 
 // You need to export an object to set up your config
 // Go to https://hardhat.org/config/ to learn more
-export default config;
+export default config

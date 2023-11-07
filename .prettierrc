@@ -25,7 +25,8 @@
         "singleQuote": false,
         "bracketSpacing": true,
         "arrowParens": "avoid",
-        "explicitTypes": "always"
+        "explicitTypes": "always",
+        "semi": false
       }
     }
   ]

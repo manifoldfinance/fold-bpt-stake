@@ -15,9 +15,10 @@ contract StakedBPT is ERC4626, ReentrancyGuard, Ownable {
     address public immutable bpt;
     address public immutable auraBal;
     address public immutable depositor;
-    address public immutable staking;
+    address public immutable pool;
     address public treasury;
     uint256 public minLockDuration;
+    mapping(address => uint256) public lastDepositTimestamp;
 
     event UpdateTreasury(address indexed treasury);
     event UpdateMinLockDuration(uint256 duration);
@@ -26,9 +27,10 @@ contract StakedBPT is ERC4626, ReentrancyGuard, Ownable {
         address _bpt,
         address _auroBal,
         address _depositor,
-        address _staking,
+        address _pool,
         address _treasury,
-        uint256 _minLockDuration
+        uint256 _minLockDuration,
+        address _owner
     )
         ERC4626(IERC20(_bpt))
         ERC20(
@@ -39,9 +41,10 @@ contract StakedBPT is ERC4626, ReentrancyGuard, Ownable {
         bpt = _bpt;
         auraBal = _auroBal;
         depositor = _depositor;
-        staking = _staking;
+        pool = _pool;
         treasury = _treasury;
         minLockDuration = _minLockDuration;
+        transferOwnership(_owner);
 
         emit UpdateTreasury(_treasury);
         emit UpdateMinLockDuration(_minLockDuration);
@@ -84,9 +87,12 @@ contract StakedBPT is ERC4626, ReentrancyGuard, Ownable {
         IERC20(bpt).approve(depositor, assets);
         ICrvDepositor(depositor).deposit(assets, true);
 
-        IBasicRewards(staking).stake(assets);
+        // Stake auraBal
+        IERC20(auraBal).approve(pool, assets);
+        IBasicRewards(pool).stake(assets);
 
         _mint(receiver, shares);
+        lastDepositTimestamp[caller] = block.timestamp;
 
         emit Deposit(caller, receiver, assets, shares);
     }
@@ -102,17 +108,26 @@ contract StakedBPT is ERC4626, ReentrancyGuard, Ownable {
             _spendAllowance(owner, caller, shares);
         }
 
+        require(lastDepositTimestamp[owner] + minLockDuration <= block.timestamp, "StakedBPT: locked");
+
         // Receive auraBal
-        IBasicRewards(staking).withdraw(assets, false);
+        IBasicRewards(pool).withdraw(assets, false);
 
         _burn(owner, shares);
+
+        // Transfer auraBal
         IERC20(auraBal).safeTransfer(receiver, assets);
 
         emit Withdraw(caller, receiver, owner, assets, shares);
     }
 
+    function harvestAndTransferTokens(address[] memory tokens) external {
+        harvest();
+        transferTokens(tokens);
+    }
+
     function harvest() public nonReentrant {
-        IBasicRewards(staking).getReward();
+        IBasicRewards(pool).getReward();
     }
 
     function transferTokens(address[] memory tokens) public nonReentrant {
