@@ -31,3 +31,8 @@ docs/**/*
 .idea/**/usage.statistics.xml
 .idea/**/dictionaries
 .idea/**/shelf
+
+# lz-kit
+deployments/*-fork
+hardhat-configs
+.logs

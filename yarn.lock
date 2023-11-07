@@ -1074,10 +1074,10 @@
   resolved "https://registry.yarnpkg.com/@lz-asia/lz-constants/-/lz-constants-0.1.1.tgz#e94ee5c60592f35c92d9f5efe4e5b66e062eeb97"
   integrity sha512-hrDlSmHWHksZKZrlE9ztj5oAFJqN/GTNJsoXEGlAF7QGhCqBGuoHB71BxLWLVM8fDdkyoHy+BPFqUMhRuAHRrQ==
 
-"@lz-kit/cli@^0.7.0":
-  version "0.7.1"
-  resolved "https://registry.yarnpkg.com/@lz-kit/cli/-/cli-0.7.1.tgz#413cae056043c12f1220b11e9aa4621360dbe5fa"
-  integrity sha512-uzSHx49D1h0djVbfgmu6KUNJkwrKNJylAwV3UkMdfLbIf7VxMXk5ut3v1GA2j3p9aO9maNwkzQN9wyAD4ae47Q==
+"@lz-kit/cli@^0.7.2":
+  version "0.7.2"
+  resolved "https://registry.yarnpkg.com/@lz-kit/cli/-/cli-0.7.2.tgz#bf0927ef45f32ed70656b84eb49657e8369c898e"
+  integrity sha512-niusDe1QBypTyOQkPzmSVy32jNWE5bFT/ZpTI44OUX4jwkSCEeCkZ4uDFdKfrSrhtrfwrvjS0NKA1W831GGi7A==
   dependencies:
     ansi-colors "^4.1.3"
     commander "^10.0.1"
