@@ -80,7 +80,7 @@ describe("StakedBPT", function () {
         expect(await this.eth.stakedBPT.balanceOf(this.eth.alice.address)).to.eq(amount)
     })
 
-    it.only("should harvest()", async function (this: Context) {
+    it("should harvest()", async function (this: Context) {
         const amount = utils.parseEther("0.01")
         await this.eth.bpt.connect(this.eth.deployer).transfer(this.eth.alice.address, amount)
 
