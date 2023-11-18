@@ -1,15 +1,13 @@
 {
-  "name": "@lz-asia/layerzero-foundation",
-  "description": "",
+  "name": "@manifoldfinance/fold-captive-insurance",
+  "version": "v0.0.2",
+  "private": true,
+  "description": "Coverage Captive Insurance Pool",
   "keywords": [
     "layerzero",
     "lz",
     "lz-asia"
   ],
-  "homepage": "https://github.com/lz-asia/layerzero-foundation#readme",
-  "bugs": "https://github.com/lz-asia/layerzero-foundation/issues",
-  "license": "MIT",
-  "author": "LevX <team@levx.io>",
   "files": [
     "abis",
     "contracts",
@@ -120,6 +118,7 @@
   },
   "dependencies": {
     "@layerzerolabs/solidity-examples": "^0.0.13",
-    "@openzeppelin/contracts": "^4.9.3"
+    "@openzeppelin/contracts": "^4.9.3",
+    "upgrade": "^1.1.0"
   }
 }
