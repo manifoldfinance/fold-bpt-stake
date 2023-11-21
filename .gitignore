@@ -36,3 +36,7 @@ docs/**/*
 deployments/*-fork
 hardhat-configs
 .logs
+
+# forge
+forge-cache/
+out/
