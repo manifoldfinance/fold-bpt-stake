@@ -2,11 +2,10 @@
 
 pragma solidity ^0.8.17;
 
-import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "@solmate/utils/SafeTransferLib.sol";
 
 contract DisperseL2 {
-    using SafeERC20 for IERC20;
-    using Address for address payable;
+    using SafeTransferLib for ERC20;
 
     function disperse(address token, address[] memory recipients, uint256[] memory amounts) external {
         uint256 length = recipients.length;
@@ -16,7 +15,7 @@ contract DisperseL2 {
             for (uint256 i; i < length; ) {
                 uint256 amount = amounts[i];
                 if (amount > 0) {
-                    payable(recipients[i]).sendValue(amount);
+                    payable(recipients[i]).transfer(amount);
                 }
                 unchecked {
                     ++i;
@@ -26,7 +25,7 @@ contract DisperseL2 {
             for (uint256 i; i < length; ) {
                 uint256 amount = amounts[i];
                 if (amount > 0) {
-                    IERC20(token).safeTransfer(recipients[i], amount);
+                    ERC20(token).safeTransfer(recipients[i], amount);
                 }
                 unchecked {
                     ++i;
