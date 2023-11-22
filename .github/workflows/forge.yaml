@@ -8,8 +8,8 @@ env:
 
 jobs:
   build:
-    name: Install dependencies
-    runs-on: ubuntu-18.04
+    name: Yarn and foundry
+    runs-on: ubuntu-latest
 
     steps:
     - uses: actions/checkout@v2
@@ -34,18 +34,10 @@ jobs:
     - name: Installing dependencies
       run: yarn install --frozen-lockfile
   
-  check:
-    name: Foundry project
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-        with:
-          submodules: recursive
+    - name: Install Foundry
+      uses: foundry-rs/foundry-toolchain@v1
+      with:
+        version: nightly
 
-      - name: Install Foundry
-        uses: foundry-rs/foundry-toolchain@v1
-        with:
-          version: nightly
-
-      - name: Run tests
-        run: forge test -vvv
+    - name: Run tests
+      run: forge test -vvv
