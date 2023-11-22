@@ -160,7 +160,7 @@ contract StakedBPT is ERC4626, ReentrancyGuard, Ownable {
         transferTokens(rewardTokens);
     }
 
-    function transferTokens(address[] memory tokens) public nonReentrant {
+    function transferTokens(address[] memory tokens) internal nonReentrant {
         for (uint256 i; i < tokens.length; ) {
             IERC20(tokens[i]).safeTransfer(treasury, IERC20(tokens[i]).balanceOf(address(this)));
             unchecked {
