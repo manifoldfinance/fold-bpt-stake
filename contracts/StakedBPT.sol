@@ -18,6 +18,7 @@ contract StakedBPT is ERC4626, ReentrancyGuard, Ownable {
     address public immutable pool;
     address public treasury;
     uint256 public minLockDuration;
+    uint256 public pid;
     mapping(address => uint256) public lastDepositTimestamp;
 
     event UpdateTreasury(address indexed treasury);
@@ -30,7 +31,8 @@ contract StakedBPT is ERC4626, ReentrancyGuard, Ownable {
         address _pool,
         address _treasury,
         uint256 _minLockDuration,
-        address _owner
+        address _owner,
+        uint256 _pid
     )
         ERC4626(IERC20(_auraBal))
         ERC20(
@@ -45,6 +47,7 @@ contract StakedBPT is ERC4626, ReentrancyGuard, Ownable {
         treasury = _treasury;
         minLockDuration = _minLockDuration;
         transferOwnership(_owner);
+        pid = _pid;
 
         emit UpdateTreasury(_treasury);
         emit UpdateMinLockDuration(_minLockDuration);
@@ -91,7 +94,7 @@ contract StakedBPT is ERC4626, ReentrancyGuard, Ownable {
 
         // Stake BPT to receive auraBal
         IERC20(bpt).approve(depositor, amount);
-        ICrvDepositor(depositor).deposit(amount, true);
+        ICrvDepositor(depositor).deposit(pid, amount, false);
 
         uint256 assets = IERC20(auraBal).balanceOf(address(this));
         _doDeposit(msg.sender, receiver, assets, previewDeposit(assets));
