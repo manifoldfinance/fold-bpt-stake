@@ -7,6 +7,8 @@ import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "./interfaces/ICrvDepositor.sol";
 import "./interfaces/IBasicRewards.sol";
+import "./interfaces/IVirtualRewards.sol";
+import "./interfaces/IStash.sol";
 
 // Take BPT -> Stake on Aura -> Someone need to pay to harvest rewards -> Send to treasury multisig
 contract StakedBPT is ERC4626, ReentrancyGuard, Ownable {
@@ -143,11 +145,19 @@ contract StakedBPT is ERC4626, ReentrancyGuard, Ownable {
         emit Withdraw(caller, receiver, owner, assets, shares);
     }
 
-    function harvest() public nonReentrant {
+    function harvest() public {
         IBasicRewards(pool).getReward();
 
-        address rewardToken = IBasicRewards(pool).rewardToken();
-        IERC20(rewardToken).safeTransfer(treasury, IERC20(rewardToken).balanceOf(address(this)));
+        uint256 len = IBasicRewards(pool).extraRewardsLength();
+        address[] memory rewardTokens = new address[](len + 1);
+        rewardTokens[0] = IBasicRewards(pool).rewardToken();
+        for (uint256 i; i < len; i++) {
+            IStash stash = IStash(IVirtualRewards(IBasicRewards(pool).extraRewards(i)).rewardToken());
+            rewardTokens[i + 1] = stash.baseToken();
+        }
+
+        // IERC20(rewardToken).safeTransfer(treasury, IERC20(rewardToken).balanceOf(address(this)));
+        transferTokens(rewardTokens);
     }
 
     function transferTokens(address[] memory tokens) public nonReentrant {

@@ -5,6 +5,7 @@ pragma solidity ^0.8.19;
 import "forge-std/Test.sol";
 
 import {IWETH} from "./interfaces/IWETH.sol";
+import {IBasicRewards} from "contracts/interfaces/IBasicRewards.sol";
 import {IAsset, IVault} from "./interfaces/IVault.sol";
 import {IERC20, StakedBPT} from "contracts/StakedBPT.sol";
 
@@ -23,6 +24,7 @@ contract StakedBPTTest is Test {
         0xb3b675a9a3cb0df8f66caf08549371bfb76a9867000200000000000000000611;
     string RPC_ETH_MAINNET = vm.envString("RPC_MAINNET");
     uint256 FORK_ID;
+    address constant aura = 0xC0c293ce456fF0ED870ADd98a0828Dd4d2903DBF;
 
     IWETH weth = IWETH(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
     IVault _vault = IVault(0xBA12222222228d8Ba445958a75a0704d566BF2C8);
@@ -44,7 +46,7 @@ contract StakedBPTTest is Test {
     }
 
     function testdepositBPT(uint128 amount) public virtual {
-        vm.assume(amount > 1 ether);
+        vm.assume(amount > 0.1 ether);
         vm.selectFork(FORK_ID);
         // _depositEthForBPT(amount);
         writeTokenBalance(address(this), bpt, amount);
@@ -54,6 +56,42 @@ contract StakedBPTTest is Test {
             address(this)
         );
         assertGt(stakedBPT.balanceOf(address(this)), 0);
+    }
+
+    function testWithdraw(uint128 amount) public virtual {
+        vm.assume(amount > 0.1 ether);
+        vm.selectFork(FORK_ID);
+        // _depositEthForBPT(amount);
+        writeTokenBalance(address(this), bpt, amount);
+        IERC20(bpt).approve(address(stakedBPT), amount);
+        stakedBPT.depositBPT(
+            IERC20(bpt).balanceOf(address(this)),
+            address(this)
+        );
+        vm.warp(block.timestamp + 60 days);
+        stakedBPT.withdraw(
+            stakedBPT.balanceOf(address(this)),
+            address(this),
+            address(this)
+        );
+        assertGt(IERC20(auraBal).balanceOf(address(this)), 0);
+    }
+
+    function testHarvest(uint128 amount) public virtual {
+        vm.assume(amount > 1 ether);
+        vm.assume(amount < 100000000 ether);
+        vm.selectFork(FORK_ID);
+        // _depositEthForBPT(amount);
+        writeTokenBalance(address(this), bpt, amount);
+        IERC20(bpt).approve(address(stakedBPT), amount);
+        stakedBPT.depositBPT(
+            IERC20(bpt).balanceOf(address(this)),
+            address(this)
+        );
+        uint256 balBefore = IERC20(aura).balanceOf(treasury);
+        vm.warp(block.timestamp + 60 days);
+        stakedBPT.harvest();
+        assertGt(IERC20(aura).balanceOf(treasury), balBefore);
     }
 
     function _depositEthForBPT(uint256 amount) internal {
