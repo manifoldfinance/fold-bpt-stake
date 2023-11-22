@@ -3,6 +3,9 @@ name: Forge tests
 # Controls when the action will run. 
 on: [push]
 
+env:
+  RPC_MAINNET: ${{ secrets.RPC_MAINNET }}
+
 jobs:
   build:
     name: Install dependencies
