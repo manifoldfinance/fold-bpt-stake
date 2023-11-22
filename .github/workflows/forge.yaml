@@ -33,6 +33,9 @@ jobs:
 
     - name: Installing dependencies
       run: yarn install --frozen-lockfile
+
+    - name: yarn test:coverage
+      run: yarn test:coverage
   
     - name: Install Foundry
       uses: foundry-rs/foundry-toolchain@v1
