@@ -4,6 +4,8 @@ pragma solidity ^0.8.10;
 interface IBasicRewards {
     event RewardPaid(address indexed user, uint256 reward);
 
+    function deposit(uint256, address) external returns (uint256);
+
     function stakeFor(address, uint256) external returns (bool);
 
     function balanceOf(address) external view returns (uint256);
