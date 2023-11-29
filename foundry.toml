@@ -1,19 +1,13 @@
 [profile.default]
 src = "contracts"
-test = "test"
+test = 'test/foundry'
 script = "script"
 out = "out"
-libs = ["node_modules"]
-remappings = [
-    "@layerzerolabs/=node_modules/@layerzerolabs/",
-    "@openzeppelin/=node_modules/@openzeppelin/",
-    "hardhat-deploy/=node_modules/hardhat-deploy/",
-    "hardhat/=node_modules/hardhat/",
-]
+libs = ['node_modules', 'lib']
 auto_detect_remappings = true
 libraries = []
 cache = true
-cache_path = "cache"
+cache_path = 'forge-cache'
 broadcast = "broadcast"
 allow_paths = []
 include_paths = []
@@ -108,3 +102,8 @@ max_fuzz_dictionary_addresses = 15728640
 max_fuzz_dictionary_values = 6553600
 shrink_sequence = true
 
+[etherscan]
+mainnet = { key = "${ETHERSCAN_API_KEY}" }
+
+[rpc_endpoints]
+mainnet = "${RPC_MAINNET}"

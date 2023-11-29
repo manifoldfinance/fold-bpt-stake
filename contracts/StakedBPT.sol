@@ -7,6 +7,8 @@ import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "./interfaces/ICrvDepositor.sol";
 import "./interfaces/IBasicRewards.sol";
+import "./interfaces/IVirtualRewards.sol";
+import "./interfaces/IStash.sol";
 
 // Take BPT -> Stake on Aura -> Someone need to pay to harvest rewards -> Send to treasury multisig
 contract StakedBPT is ERC4626, ReentrancyGuard, Ownable {
@@ -18,6 +20,7 @@ contract StakedBPT is ERC4626, ReentrancyGuard, Ownable {
     address public immutable pool;
     address public treasury;
     uint256 public minLockDuration;
+    uint256 public pid;
     mapping(address => uint256) public lastDepositTimestamp;
 
     event UpdateTreasury(address indexed treasury);
@@ -30,7 +33,8 @@ contract StakedBPT is ERC4626, ReentrancyGuard, Ownable {
         address _pool,
         address _treasury,
         uint256 _minLockDuration,
-        address _owner
+        address _owner,
+        uint256 _pid
     )
         ERC4626(IERC20(_auraBal))
         ERC20(
@@ -45,6 +49,7 @@ contract StakedBPT is ERC4626, ReentrancyGuard, Ownable {
         treasury = _treasury;
         minLockDuration = _minLockDuration;
         transferOwnership(_owner);
+        pid = _pid;
 
         emit UpdateTreasury(_treasury);
         emit UpdateMinLockDuration(_minLockDuration);
@@ -91,7 +96,7 @@ contract StakedBPT is ERC4626, ReentrancyGuard, Ownable {
 
         // Stake BPT to receive auraBal
         IERC20(bpt).approve(depositor, amount);
-        ICrvDepositor(depositor).deposit(amount, true);
+        ICrvDepositor(depositor).deposit(pid, amount, false);
 
         uint256 assets = IERC20(auraBal).balanceOf(address(this));
         _doDeposit(msg.sender, receiver, assets, previewDeposit(assets));
@@ -140,14 +145,22 @@ contract StakedBPT is ERC4626, ReentrancyGuard, Ownable {
         emit Withdraw(caller, receiver, owner, assets, shares);
     }
 
-    function harvest() public nonReentrant {
+    function harvest() public {
         IBasicRewards(pool).getReward();
 
-        address rewardToken = IBasicRewards(pool).rewardToken();
-        IERC20(rewardToken).safeTransfer(treasury, IERC20(rewardToken).balanceOf(address(this)));
+        uint256 len = IBasicRewards(pool).extraRewardsLength();
+        address[] memory rewardTokens = new address[](len + 1);
+        rewardTokens[0] = IBasicRewards(pool).rewardToken();
+        for (uint256 i; i < len; i++) {
+            IStash stash = IStash(IVirtualRewards(IBasicRewards(pool).extraRewards(i)).rewardToken());
+            rewardTokens[i + 1] = stash.baseToken();
+        }
+
+        // IERC20(rewardToken).safeTransfer(treasury, IERC20(rewardToken).balanceOf(address(this)));
+        transferTokens(rewardTokens);
     }
 
-    function transferTokens(address[] memory tokens) public nonReentrant {
+    function transferTokens(address[] memory tokens) internal nonReentrant {
         for (uint256 i; i < tokens.length; ) {
             IERC20(tokens[i]).safeTransfer(treasury, IERC20(tokens[i]).balanceOf(address(this)));
             unchecked {
