@@ -145,6 +145,32 @@ contract StakedBPT is ERC4626, ReentrancyGuard, Ownable {
         emit Withdraw(caller, receiver, owner, assets, shares);
     }
 
+    function withdrawBPT(uint256 assets, address receiver, address owner) public virtual returns (uint256) {
+        require(assets <= maxWithdraw(owner), "ERC4626: withdraw more than max");
+
+        uint256 shares = previewWithdraw(assets);
+
+        if (msg.sender != owner) {
+            _spendAllowance(owner, msg.sender, shares);
+        }
+
+        require(lastDepositTimestamp[owner] + minLockDuration <= block.timestamp, "StakedBPT: locked");
+
+        // Receive BPT
+        IBasicRewards(pool).withdraw(assets, false);
+        IERC20(auraBal).approve(depositor, assets);
+        ICrvDepositor(depositor).withdraw(pid, assets);
+
+        _burn(owner, shares);
+
+        // Transfer BPT
+        IERC20(bpt).safeTransfer(receiver, assets);
+
+        emit Withdraw(msg.sender, receiver, owner, assets, shares);
+
+        return shares;
+    }
+
     function harvest() public {
         IBasicRewards(pool).getReward();
 

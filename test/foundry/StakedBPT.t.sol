@@ -77,6 +77,25 @@ contract StakedBPTTest is Test {
         assertGt(IERC20(auraBal).balanceOf(address(this)), 0);
     }
 
+    function testWithdrawBPT(uint128 amount) public virtual {
+        vm.assume(amount > 0.1 ether);
+        vm.selectFork(FORK_ID);
+        // _depositEthForBPT(amount);
+        writeTokenBalance(address(this), bpt, amount);
+        IERC20(bpt).approve(address(stakedBPT), amount);
+        stakedBPT.depositBPT(
+            IERC20(bpt).balanceOf(address(this)),
+            address(this)
+        );
+        vm.warp(block.timestamp + 60 days);
+        stakedBPT.withdrawBPT(
+            stakedBPT.balanceOf(address(this)),
+            address(this),
+            address(this)
+        );
+        assertGt(IERC20(bpt).balanceOf(address(this)), 0);
+    }
+
     function testHarvest(uint128 amount) public virtual {
         vm.assume(amount > 1 ether);
         vm.assume(amount < 100000000 ether);
