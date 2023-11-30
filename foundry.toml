@@ -3,6 +3,10 @@ src = "contracts"
 test = 'test/foundry'
 script = "script"
 out = "out"
+remappings = [
+    "@openzeppelin/=lib/openzeppelin-contracts",
+    "@solmate=lib/solmate/src"
+]
 libs = ['node_modules', 'lib']
 auto_detect_remappings = true
 libraries = []
@@ -73,13 +77,6 @@ override_spacing = false
 wrap_comments = false
 ignore = []
 contract_new_lines = false
-
-[doc]
-out = "docs"
-title = ""
-book = "book.toml"
-homepage = "README.md"
-ignore = []
 
 [fuzz]
 runs = 256
