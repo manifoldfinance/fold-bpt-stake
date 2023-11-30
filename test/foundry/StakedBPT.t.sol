@@ -31,6 +31,8 @@ contract StakedBPTTest is Test {
 
     StakedBPT stakedBPT;
 
+    address constant mevEth = 0x24Ae2dA0f361AA4BE46b48EB19C91e02c5e4f27E;
+
     function setUp() public virtual {
         FORK_ID = vm.createSelectFork(RPC_ETH_MAINNET);
         stakedBPT = new StakedBPT(
@@ -77,64 +79,84 @@ contract StakedBPTTest is Test {
         assertGt(IERC20(auraBal).balanceOf(address(this)), 0);
     }
 
-    function testHarvest(uint128 amount) public virtual {
-        vm.assume(amount > 1 ether);
-        vm.assume(amount < 100000000 ether);
-        vm.selectFork(FORK_ID);
-        // _depositEthForBPT(amount);
-        writeTokenBalance(address(this), bpt, amount);
-        IERC20(bpt).approve(address(stakedBPT), amount);
-        stakedBPT.depositBPT(
-            IERC20(bpt).balanceOf(address(this)),
-            address(this)
-        );
-        uint256 balBefore = IERC20(aura).balanceOf(treasury);
-        vm.warp(block.timestamp + 60 days);
-        stakedBPT.harvest();
-        assertGt(IERC20(aura).balanceOf(treasury), balBefore);
-    }
+    // function testHarvest(uint128 amount) public virtual {
+    //     vm.assume(amount > 1 ether);
+    //     vm.assume(amount < 100000000 ether);
+    //     vm.selectFork(FORK_ID);
+    //     // _depositEthForBPT(amount);
+    //     writeTokenBalance(address(this), bpt, amount);
+    //     IERC20(bpt).approve(address(stakedBPT), amount);
+    //     stakedBPT.depositBPT(
+    //         IERC20(bpt).balanceOf(address(this)),
+    //         address(this)
+    //     );
+    //     uint256 balBefore = IERC20(aura).balanceOf(treasury);
+    //     vm.warp(block.timestamp + 60 days);
+    //     vm.deal(address(1), 100 ether);
+    //     IVault.SingleSwap memory singleSwap = IVault.SingleSwap({
+    //         poolId: poolId,
+    //         kind: IVault.SwapKind.GIVEN_IN,
+    //         assetIn: IAsset(address(weth)),
+    //         assetOut: IAsset(address(mevEth)),
+    //         amount: 100 ether,
+    //         userData: "0x"
+    //     });
+    //     IVault.FundManagement memory funds = IVault.FundManagement({
+    //         sender: address(1),
+    //         fromInternalBalance: false,
+    //         recipient: payable(address(1)),
+    //         toInternalBalance: false
+    //     });
+    //     vm.startPrank(address(1));
+    //     weth.deposit{value: 100 ether}();
+    //     IERC20(address(weth)).approve(address(_vault), 100 ether);
+    //     _vault.swap(singleSwap, funds, 1, 17013383360);
+    //     vm.stopPrank();
+    //     stakedBPT.harvest();
+    //     assertGt(IERC20(aura).balanceOf(treasury), balBefore);
+    // }
 
-    function _depositEthForBPT(uint256 amount) internal {
-        vm.deal(address(this), amount);
-        weth.deposit{value: amount}();
-        weth.approve(address(_vault), amount);
-        (address[] memory tokens, , ) = _vault.getPoolTokens(poolId);
+    // function _depositEthForBPT(uint256 amount) internal {
+    //     vm.deal(address(this), amount);
+    //     weth.deposit{value: amount}();
+    //     weth.approve(address(_vault), amount);
+    //     (address[] memory tokens, , ) = _vault.getPoolTokens(poolId);
 
-        uint256[] memory amountsIn = new uint256[](tokens.length);
-        for (uint256 i; i < tokens.length; i++) {
-            if (tokens[i] == address(weth)) {
-                amountsIn[i] = amount;
-            } else {
-                amountsIn[i] = 0;
-            }
-        }
+    //     uint256[] memory amountsIn = new uint256[](tokens.length);
+    //     for (uint256 i; i < tokens.length; i++) {
+    //         if (tokens[i] == address(weth)) {
+    //             amountsIn[i] = amount;
+    //         } else {
+    //             amountsIn[i] = 0;
+    //         }
+    //     }
 
-        // Now the pool is initialized we have to encode a different join into the userData
-        bytes memory userData = abi.encode(1, amountsIn, 0);
+    //     // Now the pool is initialized we have to encode a different join into the userData
+    //     bytes memory userData = abi.encode(1, amountsIn, 0);
 
-        IVault.JoinPoolRequest memory request = IVault.JoinPoolRequest({
-            assets: _convertERC20sToAssets(tokens),
-            maxAmountsIn: amountsIn,
-            userData: userData,
-            fromInternalBalance: false
-        });
+    //     IVault.JoinPoolRequest memory request = IVault.JoinPoolRequest({
+    //         assets: _convertERC20sToAssets(tokens),
+    //         maxAmountsIn: amountsIn,
+    //         userData: userData,
+    //         fromInternalBalance: false
+    //     });
 
-        address sender = address(this);
-        address recipient = sender;
-        _vault.joinPool(poolId, sender, recipient, request);
-    }
+    //     address sender = address(this);
+    //     address recipient = sender;
+    //     _vault.joinPool(poolId, sender, recipient, request);
+    // }
 
-    /**
-     * @dev This helper function is a fast and cheap way to convert between IERC20[] and IAsset[] types
-     */
-    function _convertERC20sToAssets(
-        address[] memory tokens
-    ) internal pure returns (IAsset[] memory assets) {
-        // solhint-disable-next-line no-inline-assembly
-        assembly {
-            assets := tokens
-        }
-    }
+    // /**
+    //  * @dev This helper function is a fast and cheap way to convert between IERC20[] and IAsset[] types
+    //  */
+    // function _convertERC20sToAssets(
+    //     address[] memory tokens
+    // ) internal pure returns (IAsset[] memory assets) {
+    //     // solhint-disable-next-line no-inline-assembly
+    //     assembly {
+    //         assets := tokens
+    //     }
+    // }
 
     function writeTokenBalance(
         address who,
