@@ -113,6 +113,7 @@ contract StakedBPT is ERC4626, ReentrancyGuard, Owned {
     }
 
     function harvest() public {
+        ICrvDepositor(depositor).earmarkRewards(pid);
         IBasicRewards(pool).getReward();
         uint256 len = IBasicRewards(pool).extraRewardsLength();
         address[] memory rewardTokens = new address[](len + 1);
