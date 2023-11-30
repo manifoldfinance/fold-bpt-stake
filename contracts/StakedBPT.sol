@@ -73,54 +73,32 @@ contract StakedBPT is ERC4626, ReentrancyGuard, Owned {
         emit UpdateMinLockDuration(_minLockDuration);
     }
 
-    /// 
-    /// BPT overloaded functions
-    /// 
+    ///
+    /// BPT functions
+    ///
 
-    function depositBPT(uint256 assets, address receiver) public virtual returns (uint256 shares) {
-        ERC20(bpt).safeTransferFrom(msg.sender, address(this), amount);
+    function depositBPT(uint256 bptAmount, address receiver) public virtual returns (uint256 shares) {
+        ERC20(bpt).safeTransferFrom(msg.sender, address(this), bptAmount);
 
         // Stake BPT to receive auraBal
-        IERC20(bpt).approve(depositor, amount);
-        ICrvDepositor(depositor).deposit(amount, true);
+        IERC20(bpt).approve(depositor, bptAmount);
+        ICrvDepositor(depositor).deposit(pid, bptAmount, false);
+
+        uint256 assets = IERC20(auraBal).balanceOf(address(this));
 
         // Check for rounding error since we round down in previewDeposit.
         require((shares = previewDeposit(assets)) != 0, "ZERO_SHARES");
 
-        // Need to transfer before minting or ERC777s could reenter.
-        asset.safeTransferFrom(msg.sender, address(this), assets);
-
         _mint(receiver, shares);
 
         emit Deposit(msg.sender, receiver, assets, shares);
-    }
 
-    function mintBPT(uint256 shares, address receiver) public virtual returns (uint256 assets) {
-        assets = previewMint(shares); // No need to check for rounding error, previewMint rounds up.
-
-        // Need to transfer before minting or ERC777s could reenter.
-        asset.safeTransferFrom(msg.sender, address(this), assets);
-
-        _mint(receiver, shares);
-
-        emit Deposit(msg.sender, receiver, assets, shares);
+        afterDeposit(assets, shares);
     }
 
     /// Hooks for regular assets
 
-    function depositBPT(uint256 amount, address receiver) external nonReentrant {
-        require(amount > 0, "StakedBPT: amount is zero");
-
-        ERC20(bpt).safeTransferFrom(msg.sender, address(this), amount);
-
-        // Stake BPT to receive auraBal
-        IERC20(bpt).approve(depositor, amount);
-        ICrvDepositor(depositor).deposit(pid, amount, false);
-
-        uint256 assets = IERC20(auraBal).balanceOf(address(this));
-    }
-
-    function afterDeposit(uint256 assets, uint256) internal override { 
+    function afterDeposit(uint256 assets, uint256) internal override {
         IERC20(auraBal).approve(pool, assets);
         IBasicRewards(pool).stake(assets);
 
