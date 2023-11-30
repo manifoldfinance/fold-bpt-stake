@@ -28,6 +28,7 @@ contract StakedBPTTest is Test {
 
     IWETH weth = IWETH(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
     IVault _vault = IVault(0xBA12222222228d8Ba445958a75a0704d566BF2C8);
+    address mevEth = 0x24Ae2dA0f361AA4BE46b48EB19C91e02c5e4f27E;
 
     StakedBPT stakedBPT;
 
@@ -41,8 +42,26 @@ contract StakedBPTTest is Test {
             treasury,
             minLockDuration,
             owner,
-            pid
+            address(weth),
+            address(_vault),
+            pid,
+            poolId
         );
+    }
+
+    function testZapBpt(uint128 amount) public virtual {
+        vm.assume(amount > 0.1 ether);
+        vm.assume(amount < 1000000 ether);
+        vm.selectFork(FORK_ID);
+        // _depositEthForBPT(amount);
+        writeTokenBalance(address(this), mevEth, amount);
+        IERC20(mevEth).approve(address(stakedBPT), amount);
+        uint256[] memory amounts = new uint256[](2);
+        amounts[0] = amount;
+        amounts[1] = 0.0001 ether;
+        vm.deal(address(this), amounts[1]);
+        stakedBPT.zapBPT{value: amounts[1]}(amounts, address(this));
+        assertGt(stakedBPT.balanceOf(address(this)), 0);
     }
 
     function testdepositBPT(uint128 amount) public virtual {
@@ -110,7 +129,7 @@ contract StakedBPTTest is Test {
         }
 
         // Now the pool is initialized we have to encode a different join into the userData
-        bytes memory userData = abi.encode(1, amountsIn, 0);
+        bytes memory userData = abi.encode(1, amountsIn, 1);
 
         IVault.JoinPoolRequest memory request = IVault.JoinPoolRequest({
             assets: _convertERC20sToAssets(tokens),
