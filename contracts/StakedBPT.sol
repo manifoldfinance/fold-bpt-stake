@@ -11,6 +11,9 @@ import "./interfaces/IBasicRewards.sol";
 import "./interfaces/IERC20.sol";
 import "./interfaces/IVirtualRewards.sol";
 import "./interfaces/IStash.sol";
+import "./interfaces/IVault.sol";
+import "./interfaces/IWETH.sol";
+import "./interfaces/IBPT.sol";
 
 // Take BPT -> Stake on Aura -> Someone need to pay to harvest rewards -> Send to treasury multisig
 contract StakedBPT is ERC4626, ReentrancyGuard, Owned {
@@ -20,9 +23,12 @@ contract StakedBPT is ERC4626, ReentrancyGuard, Owned {
     address public immutable auraBal;
     address public immutable depositor;
     address public immutable pool;
+    IWETH public immutable weth;
+    IVault public immutable bal;
     address public treasury;
     uint256 public minLockDuration;
     uint256 public pid;
+    bytes32 public immutable poolId;
     mapping(address => uint256) public lastDepositTimestamp;
 
     event UpdateTreasury(address indexed treasury);
@@ -36,7 +42,10 @@ contract StakedBPT is ERC4626, ReentrancyGuard, Owned {
         address _treasury,
         uint256 _minLockDuration,
         address _owner,
-        uint256 _pid
+        address _weth,
+        address _vault,
+        uint256 _pid,
+        bytes32 _poolId
     )
         ERC4626(
             ERC20(_auraBal),
@@ -52,6 +61,9 @@ contract StakedBPT is ERC4626, ReentrancyGuard, Owned {
         treasury = _treasury;
         minLockDuration = _minLockDuration;
         pid = _pid;
+        weth = IWETH(_weth);
+        bal = IVault(_vault);
+        poolId = _poolId;
 
         emit UpdateTreasury(_treasury);
         emit UpdateMinLockDuration(_minLockDuration);
@@ -133,5 +145,82 @@ contract StakedBPT is ERC4626, ReentrancyGuard, Owned {
                 ++i;
             }
         }
+    }
+
+    /// @dev Zap pool token => BPT => AuraBPT => StakedAuraBPT
+    ///      Assumes: 2 token pool, 18 decimals, one sided liquidity provision (with a trace amount of other token, eg eth)
+    function zapBPT(uint256[] memory amounts, address receiver) external payable nonReentrant returns (uint256 shares) {
+        (address[] memory tokens, uint256[] memory balances, ) = bal.getPoolTokens(poolId);
+        uint256[] memory decimals = new uint256[](tokens.length);
+        for (uint256 i; i < tokens.length; i++) {
+            require(amounts[i] > 0, "StakedBPT: amount is zero");
+            if (tokens[i] == address(weth) && msg.value > 0) {
+                require(amounts[i] == msg.value, "StakedBPT: amount mismatch");
+                weth.deposit{value: msg.value}();
+            } else {
+                ERC20(tokens[i]).safeTransferFrom(msg.sender, address(this), amounts[i]);
+            }
+            decimals[i] = IERC20(tokens[i]).decimals();
+            IERC20(tokens[i]).approve(address(bal), amounts[i]);
+        }
+
+        uint256 bptAmount;
+        {
+            uint256 bptTotalSupply = IBPT(bpt).totalSupply();
+            uint256 price = IBPT(bpt).getPrice();
+            bptAmount = calculateBptDesired(bptTotalSupply, price, balances, amounts);
+        }
+
+        bytes memory userData = abi.encode(3, bptAmount);
+
+        IVault.JoinPoolRequest memory request = IVault.JoinPoolRequest({
+            assets: tokens,
+            maxAmountsIn: amounts,
+            userData: userData,
+            fromInternalBalance: false
+        });
+        address sender = address(this);
+        address recipient = sender;
+        bal.joinPool(poolId, sender, recipient, request);
+
+        // Stake BPT to receive auraBal
+        uint256 amount = IERC20(bpt).balanceOf(address(this));
+        IERC20(bpt).approve(depositor, amount);
+        ICrvDepositor(depositor).deposit(pid, amount, false);
+
+        uint256 assets = IERC20(auraBal).balanceOf(address(this));
+
+        // Check for rounding error since we round down in previewDeposit.
+        require((shares = previewDeposit(assets)) != 0, "ZERO_SHARES");
+
+        _mint(receiver, shares);
+
+        emit Deposit(msg.sender, receiver, assets, shares);
+
+        afterDeposit(assets, shares);
+
+        // refund dust
+        for (uint256 i; i < tokens.length; i++) {
+            ERC20(tokens[i]).safeTransfer(msg.sender, IERC20(tokens[i]).balanceOf(address(this)));
+        }
+    }
+
+    /// @dev simplified bptOut calculation modified from https://github.com/gyrostable/app/blob/main/src/utils/pools/calculateBptDesired.ts
+    ///      Assumes: 2 token pool, 18 decimals, one sided liquidity provision
+    function calculateBptDesired(
+        uint256 totalShares,
+        uint256 price0in1,
+        uint256[] memory balances,
+        uint256[] memory amounts
+    ) internal pure returns (uint256 bptOut) {
+        uint256 inputValue;
+        if (amounts[0] > amounts[1]) {
+            inputValue = amounts[0] * price0in1;
+        } else {
+            inputValue = amounts[1] * 10 ** 18;
+        }
+        uint256 totalValue = (balances[0] * price0in1 + balances[1] * 10 ** 18) / 10 ** 18;
+        uint256 multiplier = inputValue / totalValue;
+        bptOut = (totalShares * multiplier) / 10 ** 18;
     }
 }

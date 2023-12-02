@@ -43,8 +43,26 @@ contract StakedBPTTest is Test {
             treasury,
             minLockDuration,
             owner,
-            pid
+            address(weth),
+            address(_vault),
+            pid,
+            poolId
         );
+    }
+
+    function testZapBpt(uint128 amount) public virtual {
+        vm.assume(amount > 0.1 ether);
+        vm.assume(amount < 5000 ether);
+        vm.selectFork(FORK_ID);
+        // _depositEthForBPT(amount);
+        writeTokenBalance(address(this), mevEth, amount);
+        IERC20(mevEth).approve(address(stakedBPT), amount);
+        uint256[] memory amounts = new uint256[](2);
+        amounts[0] = amount;
+        amounts[1] = 0.0001 ether;
+        vm.deal(address(this), amounts[1]);
+        stakedBPT.zapBPT{value: amounts[1]}(amounts, address(this));
+        assertGt(stakedBPT.balanceOf(address(this)), 0);
     }
 
     function testdepositBPT(uint128 amount) public virtual {
