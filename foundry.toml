@@ -3,6 +3,10 @@ src = "contracts"
 test = 'test/foundry'
 script = "script"
 out = "out"
+remappings = [
+    "@openzeppelin/=lib/openzeppelin-contracts",
+    "@solmate=lib/solmate/src"
+]
 libs = ['node_modules', 'lib']
 auto_detect_remappings = true
 libraries = []
@@ -43,7 +47,7 @@ extra_output = []
 extra_output_files = []
 names = false
 sizes = false
-via_ir = false
+via_ir = true
 no_storage_caching = false
 no_rpc_rate_limit = false
 use_literal_content = false
@@ -51,6 +55,13 @@ bytecode_hash = "ipfs"
 cbor_metadata = true
 sparse_mode = false
 build_info = false
+
+[profile.default.optimizer_details]
+constantOptimizer = true
+yul = true
+
+[profile.default.optimizer_details.yulDetails]
+stackAllocation = true
 
 [[profile.default.fs_permissions]]
 access = "read"
@@ -74,15 +85,8 @@ wrap_comments = false
 ignore = []
 contract_new_lines = false
 
-[doc]
-out = "docs"
-title = ""
-book = "book.toml"
-homepage = "README.md"
-ignore = []
-
 [fuzz]
-runs = 256
+runs = 1000
 max_test_rejects = 65536
 dictionary_weight = 40
 include_storage = true
