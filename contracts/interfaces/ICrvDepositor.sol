@@ -7,5 +7,8 @@ interface ICrvDepositor {
     function minter() external view returns (address);
 
     function deposit(uint256 pid, uint256 _amount, bool _lock) external;
+
     function withdraw(uint256 pid, uint256 assets) external;
+
+    function earmarkRewards(uint256 pid) external;
 }
