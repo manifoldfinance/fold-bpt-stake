@@ -205,6 +205,52 @@ contract StakedBPT is ERC4626, ReentrancyGuard, Owned {
         }
     }
 
+    function zipBPT(
+        uint256 shares,
+        address receiver,
+        address owner,
+        uint256[] calldata minAmountsOut
+    ) public virtual returns (uint256[] memory amountsOut) {
+        require(shares <= maxRedeem(owner), "ERC4626: withdraw more than max");
+
+        uint256 assets = previewRedeem(shares);
+
+        if (msg.sender != owner) {
+            uint256 allowed = allowance[owner][msg.sender]; // Saves gas for limited approvals.
+            if (allowed != type(uint256).max) allowance[owner][msg.sender] = allowed - shares;
+        }
+
+        require(lastDepositTimestamp[owner] + minLockDuration <= block.timestamp, "StakedBPT: locked");
+
+        // Receive BPT
+        IBasicRewards(pool).withdraw(assets, false);
+        IERC20(auraBal).approve(depositor, assets);
+        ICrvDepositor(depositor).withdraw(pid, assets);
+
+        _burn(owner, shares);
+
+        // Exit BPT
+        (address[] memory tokens, , ) = bal.getPoolTokens(poolId);
+        {
+            bytes memory userData = abi.encode(1, IERC20(bpt).balanceOf(address(this)));
+            IVault.ExitPoolRequest memory request = IVault.ExitPoolRequest({
+                assets: tokens,
+                minAmountsOut: minAmountsOut,
+                userData: userData,
+                toInternalBalance: false
+            });
+
+            bal.exitPool(poolId, address(this), payable(address(this)), request);
+        }
+        amountsOut = new uint256[](tokens.length);
+        for (uint256 i; i < tokens.length; i++) {
+            amountsOut[i] = IERC20(tokens[i]).balanceOf(address(this));
+            ERC20(tokens[i]).safeTransfer(receiver, amountsOut[i]);
+        }
+
+        emit Withdraw(msg.sender, receiver, owner, assets, shares);
+    }
+
     /// @dev simplified bptOut calculation modified from https://github.com/gyrostable/app/blob/main/src/utils/pools/calculateBptDesired.ts
     ///      Assumes: 2 token pool, 18 decimals, one sided liquidity provision
     function calculateBptDesired(
