@@ -149,7 +149,6 @@ contract StakedBPT is ERC4626, ReentrancyGuard, Owned {
     /**
      * @dev Internal function executed after a successful deposit.
      * @param assets Amount of auraBal received after staking BPT.
-     * @param shares Number of shares representing the staked LP tokens.
      */
     function afterDeposit(uint256 assets, uint256) internal override {
         IERC20(auraBal).approve(pool, assets);
@@ -161,7 +160,6 @@ contract StakedBPT is ERC4626, ReentrancyGuard, Owned {
     /**
      * @dev Internal function executed before a withdrawal to check withdrawal conditions.
      * @param assets Amount of auraBal to be withdrawn.
-     * @param shares Number of shares representing the staked LP tokens.
      */
     function beforeWithdraw(uint256 assets, uint256) internal override {
         require(lastDepositTimestamp[owner] + minLockDuration <= block.timestamp, "StakedBPT: locked");
