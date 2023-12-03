@@ -3,7 +3,7 @@
 pragma solidity ^0.8.18;
 
 import "@solmate/mixins/ERC4626.sol";
-import "@solmate/auth/Owned.sol";
+import "./Owned.sol";
 import "@solmate/utils/ReentrancyGuard.sol";
 import "@solmate/utils/SafeTransferLib.sol";
 import "./interfaces/ICrvDepositor.sol";
@@ -106,7 +106,7 @@ contract StakedBPT is ERC4626, ReentrancyGuard, Owned {
     }
 
     function beforeWithdraw(uint256 assets, uint256) internal override {
-        require(lastDepositTimestamp[owner] + minLockDuration <= block.timestamp, "StakedBPT: locked");
+        require(lastDepositTimestamp[msg.sender] + minLockDuration <= block.timestamp, "StakedBPT: locked");
 
         // Receive auraBal
         IBasicRewards(pool).withdraw(assets, false);
