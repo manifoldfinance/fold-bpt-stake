@@ -121,9 +121,12 @@ contract StakedBPT is ERC4626, ReentrancyGuard, Owned {
         uint256 len = crvRewards.extraRewardsLength();
         address[] memory rewardTokens = new address[](len + 1);
         rewardTokens[0] = crvRewards.rewardToken();
-        for (uint256 i; i < len; i++) {
+        for (uint256 i; i < len; ) {
             IStash stash = IStash(IVirtualRewards(crvRewards.extraRewards(i)).rewardToken());
             rewardTokens[i + 1] = stash.baseToken();
+            unchecked {
+                ++i;
+            }
         }
 
         transferTokens(rewardTokens);
