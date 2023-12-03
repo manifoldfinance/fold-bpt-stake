@@ -115,26 +115,43 @@ contract StakedBPT is ERC4626, ReentrancyGuard, Owned {
         crvRewards.withdraw(assets, false);
     }
 
-    function harvest() public {
+    function harvest() external {
         booster.earmarkRewards(pid);
         crvRewards.getReward();
-        uint256 len = crvRewards.extraRewardsLength();
-        address[] memory rewardTokens = new address[](len + 1);
-        rewardTokens[0] = crvRewards.rewardToken();
-        for (uint256 i; i < len; ) {
-            IStash stash = IStash(IVirtualRewards(crvRewards.extraRewards(i)).rewardToken());
-            rewardTokens[i + 1] = stash.baseToken();
-            unchecked {
-                ++i;
-            }
+        address token = crvRewards.rewardToken();
+        uint256 amount = IERC20(token).balanceOf(address(this));
+        if (amount > 0) {
+            ERC20(token).safeTransfer(treasury, amount);
         }
+        _claimExtras();
+    }
 
-        transferTokens(rewardTokens);
+    function _claimExtras() internal virtual {
+        uint256 len = crvRewards.extraRewardsLength();
+        if (len > 0) {
+            address[] memory rewardTokens = new address[](len);
+            for (uint256 i; i < len; ) {
+                address virtualRewards = crvRewards.extraRewards(i);
+                rewardTokens[i] = _getStashToken(virtualRewards);
+                unchecked {
+                    ++i;
+                }
+            }
+            transferTokens(rewardTokens);
+        }
+    }
+
+    function _getStashToken(address virtualRewards) internal virtual returns (address stashToken) {
+        address stash = IVirtualRewards(virtualRewards).rewardToken();
+        stashToken = IStash(stash).baseToken();
     }
 
     function transferTokens(address[] memory tokens) internal nonReentrant {
         for (uint256 i; i < tokens.length; ) {
-            ERC20(tokens[i]).safeTransfer(treasury, IERC20(tokens[i]).balanceOf(address(this)));
+            uint256 amount = IERC20(tokens[i]).balanceOf(address(this));
+            if (amount > 0) {
+                ERC20(tokens[i]).safeTransfer(treasury, amount);
+            }
             unchecked {
                 ++i;
             }
