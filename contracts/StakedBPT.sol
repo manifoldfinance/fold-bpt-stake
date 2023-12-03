@@ -20,7 +20,6 @@ contract StakedBPT is ERC4626, ReentrancyGuard, Owned {
     address public immutable cvxtoken;
     IBooster public immutable booster;
     IRewards public immutable crvRewards;
-    address public immutable stashHelper;
     address public treasury;
     uint256 public minLockDuration;
     uint256 public immutable pid;
@@ -58,7 +57,6 @@ contract StakedBPT is ERC4626, ReentrancyGuard, Owned {
         lptoken = _lptoken;
         cvxtoken = _cvxtoken;
         crvRewards = IRewards(info.crvRewards);
-        stashHelper = info.stash;
 
         emit UpdateTreasury(_treasury);
         emit UpdateMinLockDuration(_minLockDuration);
