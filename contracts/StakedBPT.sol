@@ -2,6 +2,7 @@
 
 pragma solidity ^0.8.18;
 
+// Import necessary contracts and libraries
 import "@solmate/mixins/ERC4626.sol";
 import "@solmate/auth/Owned.sol";
 import "@solmate/utils/ReentrancyGuard.sol";
@@ -15,10 +16,16 @@ import "./interfaces/IVault.sol";
 import "./interfaces/IWETH.sol";
 import "./interfaces/IBPT.sol";
 
-// Take BPT -> Stake on Aura -> Someone need to pay to harvest rewards -> Send to treasury multisig
+/**
+ * @title StakedBPT
+ * @dev StakedBPT is a contract that represents staked LP (Liquidity Provider) tokens,
+ * allowing users to stake their LP tokens to earn rewards in another token (auraBal).
+ * This contract extends ERC4626, implements ReentrancyGuard, and is Owned.
+ */
 contract StakedBPT is ERC4626, ReentrancyGuard, Owned {
     using SafeTransferLib for ERC20;
 
+    // Immutable variables
     address public immutable bpt;
     address public immutable auraBal;
     address public immutable depositor;
@@ -31,9 +38,24 @@ contract StakedBPT is ERC4626, ReentrancyGuard, Owned {
     bytes32 public immutable poolId;
     mapping(address => uint256) public lastDepositTimestamp;
 
+    // Events
     event UpdateTreasury(address indexed treasury);
     event UpdateMinLockDuration(uint256 duration);
 
+    /**
+     * @dev Constructor to initialize the StakedBPT contract.
+     * @param _bpt Address of the LP token
+     * @param _auraBal Address of the reward token (auraBal)
+     * @param _depositor Address of the depositor contract
+     * @param _pool Address of the rewards pool contract
+     * @param _treasury Address of the treasury
+     * @param _minLockDuration Minimum lock duration for staked LP tokens
+     * @param _owner Address of the contract owner
+     * @param _weth Address of the Wrapped Ether (WETH) contract
+     * @param _vault Address of the Balancer Vault contract
+     * @param _pid Pool ID in the rewards pool contract
+     * @param _poolId Pool ID for Balancer pool
+     */
     constructor(
         address _bpt,
         address _auraBal,
@@ -54,6 +76,7 @@ contract StakedBPT is ERC4626, ReentrancyGuard, Owned {
         )
         Owned(_owner)
     {
+        // Initialize immutable variables
         bpt = _bpt;
         auraBal = _auraBal;
         depositor = _depositor;
@@ -65,30 +88,45 @@ contract StakedBPT is ERC4626, ReentrancyGuard, Owned {
         bal = IVault(_vault);
         poolId = _poolId;
 
+        // Emit initialization events
         emit UpdateTreasury(_treasury);
         emit UpdateMinLockDuration(_minLockDuration);
     }
 
+    /**
+     * @dev View function to get the total assets held by the contract.
+     * @return uint256 representing the total assets held by the contract.
+     */
     function totalAssets() public view virtual override returns (uint256) {
         return IBasicRewards(pool).balanceOf(address(this));
     }
 
+    /**
+     * @dev Update the treasury address. Only callable by the owner.
+     * @param _treasury New treasury address.
+     */
     function updateTreasury(address _treasury) external onlyOwner {
         treasury = _treasury;
 
         emit UpdateTreasury(_treasury);
     }
 
+    /**
+     * @dev Update the minimum lock duration for staked LP tokens. Only callable by the owner.
+     * @param _minLockDuration New minimum lock duration.
+     */
     function updateMinLockDuration(uint256 _minLockDuration) external onlyOwner {
         minLockDuration = _minLockDuration;
 
         emit UpdateMinLockDuration(_minLockDuration);
     }
 
-    ///
-    /// BPT functions
-    ///
-
+    /**
+     * @dev Deposit LP tokens to stake and receive auraBal rewards.
+     * @param bptAmount Amount of LP tokens to deposit.
+     * @param receiver Address to receive the staked LP tokens.
+     * @return shares Number of shares representing the staked LP tokens.
+     */
     function depositBPT(uint256 bptAmount, address receiver) public virtual returns (uint256 shares) {
         ERC20(bpt).safeTransferFrom(msg.sender, address(this), bptAmount);
 
@@ -108,8 +146,11 @@ contract StakedBPT is ERC4626, ReentrancyGuard, Owned {
         afterDeposit(assets, shares);
     }
 
-    /// Hooks for regular assets
-
+    /**
+     * @dev Internal function executed after a successful deposit.
+     * @param assets Amount of auraBal received after staking BPT.
+     * @param shares Number of shares representing the staked LP tokens.
+     */
     function afterDeposit(uint256 assets, uint256) internal override {
         IERC20(auraBal).approve(pool, assets);
         IBasicRewards(pool).stake(assets);
@@ -117,6 +158,11 @@ contract StakedBPT is ERC4626, ReentrancyGuard, Owned {
         lastDepositTimestamp[msg.sender] = block.timestamp;
     }
 
+    /**
+     * @dev Internal function executed before a withdrawal to check withdrawal conditions.
+     * @param assets Amount of auraBal to be withdrawn.
+     * @param shares Number of shares representing the staked LP tokens.
+     */
     function beforeWithdraw(uint256 assets, uint256) internal override {
         require(lastDepositTimestamp[owner] + minLockDuration <= block.timestamp, "StakedBPT: locked");
 
@@ -124,6 +170,9 @@ contract StakedBPT is ERC4626, ReentrancyGuard, Owned {
         IBasicRewards(pool).withdraw(assets, false);
     }
 
+    /**
+     * @dev Harvest rewards from the rewards pool and transfer them to the treasury.
+     */
     function harvest() public {
         ICrvDepositor(depositor).earmarkRewards(pid);
         IBasicRewards(pool).getReward();
@@ -138,6 +187,10 @@ contract StakedBPT is ERC4626, ReentrancyGuard, Owned {
         transferTokens(rewardTokens);
     }
 
+    /**
+     * @dev Internal function to transfer reward tokens to the treasury.
+     * @param tokens Array of reward tokens to be transferred.
+     */
     function transferTokens(address[] memory tokens) internal nonReentrant {
         for (uint256 i; i < tokens.length; ) {
             ERC20(tokens[i]).safeTransfer(treasury, IERC20(tokens[i]).balanceOf(address(this)));
@@ -147,8 +200,13 @@ contract StakedBPT is ERC4626, ReentrancyGuard, Owned {
         }
     }
 
-    /// @dev Zap pool token => BPT => AuraBPT => StakedAuraBPT
-    ///      Assumes: 2 token pool, 18 decimals, one sided liquidity provision (with a trace amount of other token, eg eth)
+    /**
+     * @dev Zap into the Balancer pool by providing tokens and receiving staked LP tokens in return.
+     *      Assumes: 2 token pool, 18 decimals, one sided liquidity provision (with a trace amount of other token, eg eth)
+     * @param amounts Array of amounts of tokens to be provided.
+     * @param receiver Address to receive the staked LP tokens.
+     * @return shares Number of shares representing the staked LP tokens.
+     */
     function zapBPT(uint256[] memory amounts, address receiver) external payable nonReentrant returns (uint256 shares) {
         (address[] memory tokens, uint256[] memory balances, ) = bal.getPoolTokens(poolId);
         uint256[] memory decimals = new uint256[](tokens.length);
@@ -205,6 +263,14 @@ contract StakedBPT is ERC4626, ReentrancyGuard, Owned {
         }
     }
 
+    /**
+     * @dev Zap out of the Balancer pool by redeeming staked LP tokens and receiving underlying tokens in return.
+     * @param shares Number of shares representing the staked LP tokens to be redeemed.
+     * @param receiver Address to receive the redeemed underlying tokens.
+     * @param owner Address of the owner initiating the withdrawal.
+     * @param minAmountsOut Minimum amounts of underlying tokens to be received in the redemption.
+     * @return amountsOut Array of amounts representing the redeemed underlying tokens.
+     */
     function zipBPT(
         uint256 shares,
         address receiver,
@@ -251,8 +317,15 @@ contract StakedBPT is ERC4626, ReentrancyGuard, Owned {
         emit Withdraw(msg.sender, receiver, owner, assets, shares);
     }
 
-    /// @dev simplified bptOut calculation modified from https://github.com/gyrostable/app/blob/main/src/utils/pools/calculateBptDesired.ts
-    ///      Assumes: 2 token pool, 18 decimals, one sided liquidity provision
+    /**
+     * @dev Calculate the desired amount of BPT to be received when zapping into a Balancer pool.
+     *      Simplified bptOut calculation modified from https://github.com/gyrostable/app/blob/main/src/utils/pools/calculateBptDesired.ts
+     * @param totalShares Total supply of the BPT token.
+     * @param price0in1 Price of token0 in terms of token1.
+     * @param balances Array of token balances in the Balancer pool.
+     * @param amounts Array of token amounts being provided.
+     * @return bptOut Desired amount of BPT to be received.
+     */
     function calculateBptDesired(
         uint256 totalShares,
         uint256 price0in1,

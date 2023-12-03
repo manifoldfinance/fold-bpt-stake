@@ -1,7 +1,6 @@
 # BPT Staked
 
-You can staked 80BAL-20WETH BPT or auraBAL to receive non-transferrable StakedBPT(ERC4626) shares and
-receive rewards on L2 accordingly.
+You can stake mevETH, mevETH-WETH BPT or auraBPT to receive non-transferrable StakedBPT(ERC4626) shares and receive rewards on L2 accordingly.
 
 ## Getting Started
 
