@@ -22,7 +22,7 @@ contract StakedBPT is ERC4626, ReentrancyGuard, Owned {
     address public immutable pool;
     address public treasury;
     uint256 public minLockDuration;
-    uint256 public pid;
+    uint256 public immutable pid;
     mapping(address => uint256) public lastDepositTimestamp;
 
     event UpdateTreasury(address indexed treasury);
@@ -93,6 +93,7 @@ contract StakedBPT is ERC4626, ReentrancyGuard, Owned {
         // Check for rounding error since we round down in previewDeposit.
         shares = previewDeposit(assets);
         if (shares == 0) revert ZeroShares();
+        _updateDepositTimestamp(receiver, shares);
 
         _mint(receiver, shares);
 
@@ -106,13 +107,9 @@ contract StakedBPT is ERC4626, ReentrancyGuard, Owned {
     function afterDeposit(uint256 assets, uint256) internal override {
         IERC20(auraBal).approve(pool, assets);
         IBasicRewards(pool).stake(assets);
-
-        lastDepositTimestamp[msg.sender] = block.timestamp;
     }
 
     function beforeWithdraw(uint256 assets, uint256) internal override {
-        if (lastDepositTimestamp[owner] + minLockDuration > block.timestamp) revert TimeLocked();
-
         // Receive auraBal
         IBasicRewards(pool).withdraw(assets, false);
     }
@@ -136,6 +133,51 @@ contract StakedBPT is ERC4626, ReentrancyGuard, Owned {
             ERC20(tokens[i]).safeTransfer(treasury, IERC20(tokens[i]).balanceOf(address(this)));
             unchecked {
                 ++i;
+            }
+        }
+    }
+
+    // override ERC4626 functions to update deposit timestamp
+
+    function deposit(uint256 assets, address receiver) public virtual override returns (uint256 shares) {
+        // Set the deposit timestamp for the user
+        _updateDepositTimestamp(receiver, previewDeposit(assets));
+        shares = super.deposit(assets, receiver);
+    }
+
+    function mint(uint256 shares, address receiver) public virtual override returns (uint256 assets) {
+        // Set the deposit timestamp for the user
+        _updateDepositTimestamp(receiver, shares);
+        assets = super.mint(shares, receiver);
+    }
+
+    function withdraw(
+        uint256 assets,
+        address receiver,
+        address owner
+    ) public virtual override returns (uint256 shares) {
+        if (lastDepositTimestamp[owner] + minLockDuration > block.timestamp) revert TimeLocked();
+        shares = super.withdraw(assets, receiver, owner);
+    }
+
+    function redeem(uint256 shares, address receiver, address owner) public virtual override returns (uint256 assets) {
+        if (lastDepositTimestamp[owner] + minLockDuration > block.timestamp) revert TimeLocked();
+        assets = super.redeem(shares, receiver, owner);
+    }
+
+    function _updateDepositTimestamp(address account, uint256 shares) internal {
+        // Set the deposit timestamp for the user
+        uint256 prevBalance = balanceOf[account];
+        uint256 lastDeposit = lastDepositTimestamp[account];
+        if (prevBalance == 0 || lastDeposit == 0) {
+            lastDepositTimestamp[account] = block.timestamp;
+        } else {
+            // multiple deposits, so weight timestamp by amounts
+            unchecked {
+                lastDepositTimestamp[account] =
+                    lastDeposit +
+                    ((block.timestamp - lastDeposit) * shares) /
+                    (prevBalance + shares);
             }
         }
     }

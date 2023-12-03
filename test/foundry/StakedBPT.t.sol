@@ -96,6 +96,33 @@ contract StakedBPTTest is Test {
         assertGt(IERC20(bal).balanceOf(treasury), balBalBefore);
     }
 
+    function testDepositTimestamp() public virtual {
+        uint128 amount = 10 ether;
+        vm.assume(amount > 0.1 ether);
+        vm.selectFork(FORK_ID);
+        writeTokenBalance(address(this), bpt, 2 * amount);
+        IERC20(bpt).approve(address(stakedBPT), amount);
+        stakedBPT.depositBPT(amount, address(this));
+        uint256 balStaked = stakedBPT.balanceOf(address(this));
+        vm.expectRevert();
+        stakedBPT.withdraw(balStaked, address(this), address(this));
+        // warp 10 days (i.e. less than min lockup)
+        vm.warp(block.timestamp + 10 days);
+        IERC20(bpt).approve(address(stakedBPT), amount);
+        stakedBPT.depositBPT(
+            IERC20(bpt).balanceOf(address(this)),
+            address(this)
+        );
+        // warp to full 30 days from original deposit
+        vm.warp(block.timestamp + 20 days);
+        balStaked = stakedBPT.balanceOf(address(this));
+        vm.expectRevert();
+        stakedBPT.withdraw(balStaked, address(this), address(this));
+        vm.warp(block.timestamp + 20 days);
+        stakedBPT.withdraw(balStaked, address(this), address(this));
+        assertGt(IERC20(auraBal).balanceOf(address(this)), 0);
+    }
+
     function writeTokenBalance(
         address who,
         address token,

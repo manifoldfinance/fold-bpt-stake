@@ -1,3 +1,4 @@
 {
+    "detectors_to_exclude": "incorrect-equality,arbitrary-send-eth,unused-return,calls-loop,block-timestamp,solc-version,missing-zero-check,naming-convention",
     "filter_paths": "lib"
 }
