@@ -28,6 +28,10 @@ contract StakedBPT is ERC4626, ReentrancyGuard, Owned {
     event UpdateTreasury(address indexed treasury);
     event UpdateMinLockDuration(uint256 duration);
 
+    // Custom errors
+    error ZeroShares();
+    error TimeLocked();
+
     constructor(
         address _bpt,
         address _auraBal,
@@ -87,7 +91,8 @@ contract StakedBPT is ERC4626, ReentrancyGuard, Owned {
         uint256 assets = IERC20(auraBal).balanceOf(address(this));
 
         // Check for rounding error since we round down in previewDeposit.
-        require((shares = previewDeposit(assets)) != 0, "ZERO_SHARES");
+        shares = previewDeposit(assets);
+        if (shares == 0) revert ZeroShares();
 
         _mint(receiver, shares);
 
@@ -106,7 +111,7 @@ contract StakedBPT is ERC4626, ReentrancyGuard, Owned {
     }
 
     function beforeWithdraw(uint256 assets, uint256) internal override {
-        require(lastDepositTimestamp[owner] + minLockDuration <= block.timestamp, "StakedBPT: locked");
+        if (lastDepositTimestamp[owner] + minLockDuration > block.timestamp) revert TimeLocked();
 
         // Receive auraBal
         IBasicRewards(pool).withdraw(assets, false);
