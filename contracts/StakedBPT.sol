@@ -28,6 +28,8 @@ contract StakedBPT is ERC4626, ReentrancyGuard, Owned {
     event UpdateTreasury(address indexed treasury);
     event UpdateMinLockDuration(uint256 duration);
 
+    error TransferDisabled();
+
     constructor(
         address _bpt,
         address _auraBal,
@@ -133,5 +135,13 @@ contract StakedBPT is ERC4626, ReentrancyGuard, Owned {
                 ++i;
             }
         }
+    }
+
+    function transfer(address, uint256) public virtual override returns (bool) {
+        revert TransferDisabled();
+    }
+
+    function transferFrom(address, address, uint256) public virtual override returns (bool) {
+        revert TransferDisabled();
     }
 }
