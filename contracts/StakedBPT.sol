@@ -6,8 +6,8 @@ import "@solmate/mixins/ERC4626.sol";
 import "@solmate/auth/Owned.sol";
 import "@solmate/utils/ReentrancyGuard.sol";
 import "@solmate/utils/SafeTransferLib.sol";
-import "./interfaces/ICrvDepositor.sol";
-import "./interfaces/IBasicRewards.sol";
+import "./interfaces/IBooster.sol";
+import "./interfaces/IRewards.sol";
 import "./interfaces/IERC20.sol";
 import "./interfaces/IVirtualRewards.sol";
 import "./interfaces/IStash.sol";
@@ -16,10 +16,11 @@ import "./interfaces/IStash.sol";
 contract StakedBPT is ERC4626, ReentrancyGuard, Owned {
     using SafeTransferLib for ERC20;
 
-    address public immutable bpt;
-    address public immutable auraBal;
-    address public immutable depositor;
-    address public immutable pool;
+    address public immutable lptoken;
+    address public immutable cvxtoken;
+    IBooster public immutable booster;
+    IRewards public immutable crvRewards;
+    address public immutable stashHelper;
     address public treasury;
     uint256 public minLockDuration;
     uint256 public immutable pid;
@@ -33,36 +34,38 @@ contract StakedBPT is ERC4626, ReentrancyGuard, Owned {
     error TimeLocked();
 
     constructor(
-        address _bpt,
-        address _auraBal,
-        address _depositor,
-        address _pool,
+        address _lptoken,
+        address _cvxtoken,
+        address _booster,
         address _treasury,
-        uint256 _minLockDuration,
         address _owner,
+        uint256 _minLockDuration,
         uint256 _pid
     )
         ERC4626(
-            ERC20(_auraBal),
-            string(abi.encodePacked("Staked ", IERC20(_bpt).name())),
-            string(abi.encodePacked("stk", IERC20(_bpt).symbol()))
+            ERC20(_cvxtoken),
+            string(abi.encodePacked("Staked ", IERC20(_lptoken).name())),
+            string(abi.encodePacked("stk", IERC20(_lptoken).symbol()))
         )
         Owned(_owner)
     {
-        bpt = _bpt;
-        auraBal = _auraBal;
-        depositor = _depositor;
-        pool = _pool;
+        booster = IBooster(_booster);
         treasury = _treasury;
         minLockDuration = _minLockDuration;
         pid = _pid;
+
+        IBooster.PoolInfo memory info = booster.poolInfo(_pid);
+        lptoken = _lptoken;
+        cvxtoken = _cvxtoken;
+        crvRewards = IRewards(info.crvRewards);
+        stashHelper = info.stash;
 
         emit UpdateTreasury(_treasury);
         emit UpdateMinLockDuration(_minLockDuration);
     }
 
     function totalAssets() public view virtual override returns (uint256) {
-        return IBasicRewards(pool).balanceOf(address(this));
+        return crvRewards.balanceOf(address(this));
     }
 
     function updateTreasury(address _treasury) external onlyOwner {
@@ -78,17 +81,17 @@ contract StakedBPT is ERC4626, ReentrancyGuard, Owned {
     }
 
     ///
-    /// BPT functions
+    /// LP functions
     ///
 
-    function depositBPT(uint256 bptAmount, address receiver) public virtual returns (uint256 shares) {
-        ERC20(bpt).safeTransferFrom(msg.sender, address(this), bptAmount);
+    function depositLP(uint256 lptokenAmount, address receiver) public virtual returns (uint256 shares) {
+        ERC20(lptoken).safeTransferFrom(msg.sender, address(this), lptokenAmount);
 
-        // Stake BPT to receive auraBal
-        IERC20(bpt).approve(depositor, bptAmount);
-        ICrvDepositor(depositor).deposit(pid, bptAmount, false);
+        // Stake BPT to receive cvxtoken
+        IERC20(lptoken).approve(address(booster), lptokenAmount);
+        booster.deposit(pid, lptokenAmount, false);
 
-        uint256 assets = IERC20(auraBal).balanceOf(address(this));
+        uint256 assets = IERC20(cvxtoken).balanceOf(address(this));
 
         // Check for rounding error since we round down in previewDeposit.
         shares = previewDeposit(assets);
@@ -105,23 +108,23 @@ contract StakedBPT is ERC4626, ReentrancyGuard, Owned {
     /// Hooks for regular assets
 
     function afterDeposit(uint256 assets, uint256) internal override {
-        IERC20(auraBal).approve(pool, assets);
-        IBasicRewards(pool).stake(assets);
+        IERC20(cvxtoken).approve(address(crvRewards), assets);
+        crvRewards.stake(assets);
     }
 
     function beforeWithdraw(uint256 assets, uint256) internal override {
-        // Receive auraBal
-        IBasicRewards(pool).withdraw(assets, false);
+        // Receive cvxtoken
+        crvRewards.withdraw(assets, false);
     }
 
     function harvest() public {
-        ICrvDepositor(depositor).earmarkRewards(pid);
-        IBasicRewards(pool).getReward();
-        uint256 len = IBasicRewards(pool).extraRewardsLength();
+        booster.earmarkRewards(pid);
+        crvRewards.getReward();
+        uint256 len = crvRewards.extraRewardsLength();
         address[] memory rewardTokens = new address[](len + 1);
-        rewardTokens[0] = IBasicRewards(pool).rewardToken();
+        rewardTokens[0] = crvRewards.rewardToken();
         for (uint256 i; i < len; i++) {
-            IStash stash = IStash(IVirtualRewards(IBasicRewards(pool).extraRewards(i)).rewardToken());
+            IStash stash = IStash(IVirtualRewards(crvRewards.extraRewards(i)).rewardToken());
             rewardTokens[i + 1] = stash.baseToken();
         }
 

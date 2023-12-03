@@ -5,7 +5,7 @@ pragma solidity ^0.8.19;
 import "forge-std/Test.sol";
 
 import {IWETH} from "./interfaces/IWETH.sol";
-import {IBasicRewards} from "contracts/interfaces/IBasicRewards.sol";
+import {IRewards} from "contracts/interfaces/IRewards.sol";
 import {IAsset, IVault} from "./interfaces/IVault.sol";
 import {IERC20, StakedBPT} from "contracts/StakedBPT.sol";
 
@@ -39,20 +39,19 @@ contract StakedBPTTest is Test {
             bpt,
             auraBal,
             depositor,
-            pool,
             treasury,
-            minLockDuration,
             owner,
+            minLockDuration,
             pid
         );
     }
 
-    function testdepositBPT(uint128 amount) public virtual {
+    function testdepositLP(uint128 amount) public virtual {
         vm.assume(amount > 0.1 ether);
         vm.selectFork(FORK_ID);
         writeTokenBalance(address(this), bpt, amount);
         IERC20(bpt).approve(address(stakedBPT), amount);
-        stakedBPT.depositBPT(
+        stakedBPT.depositLP(
             IERC20(bpt).balanceOf(address(this)),
             address(this)
         );
@@ -64,7 +63,7 @@ contract StakedBPTTest is Test {
         vm.selectFork(FORK_ID);
         writeTokenBalance(address(this), bpt, amount);
         IERC20(bpt).approve(address(stakedBPT), amount);
-        stakedBPT.depositBPT(
+        stakedBPT.depositLP(
             IERC20(bpt).balanceOf(address(this)),
             address(this)
         );
@@ -83,7 +82,7 @@ contract StakedBPTTest is Test {
         vm.selectFork(FORK_ID);
         writeTokenBalance(address(this), bpt, amount);
         IERC20(bpt).approve(address(stakedBPT), amount);
-        stakedBPT.depositBPT(
+        stakedBPT.depositLP(
             IERC20(bpt).balanceOf(address(this)),
             address(this)
         );
@@ -102,14 +101,14 @@ contract StakedBPTTest is Test {
         vm.selectFork(FORK_ID);
         writeTokenBalance(address(this), bpt, 2 * amount);
         IERC20(bpt).approve(address(stakedBPT), amount);
-        stakedBPT.depositBPT(amount, address(this));
+        stakedBPT.depositLP(amount, address(this));
         uint256 balStaked = stakedBPT.balanceOf(address(this));
         vm.expectRevert();
         stakedBPT.withdraw(balStaked, address(this), address(this));
         // warp 10 days (i.e. less than min lockup)
         vm.warp(block.timestamp + 10 days);
         IERC20(bpt).approve(address(stakedBPT), amount);
-        stakedBPT.depositBPT(
+        stakedBPT.depositLP(
             IERC20(bpt).balanceOf(address(this)),
             address(this)
         );
