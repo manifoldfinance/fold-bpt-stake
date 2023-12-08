@@ -177,12 +177,9 @@ contract StakedBPT is ERC4626, ReentrancyGuard, Owned {
         uint256 len = IBasicRewards(pool).extraRewardsLength();
         address[] memory rewardTokens = new address[](len + 1);
         rewardTokens[0] = IBasicRewards(pool).rewardToken();
-        for (uint256 i; i < len; ) {
+        for (uint256 i; i < len; i = _inc(i)) {
             IStash stash = IStash(IVirtualRewards(IBasicRewards(pool).extraRewards(i)).rewardToken());
             rewardTokens[i + 1] = stash.baseToken();
-            unchecked {
-                i++;
-            }
         }
 
         transferTokens(rewardTokens);
@@ -193,11 +190,8 @@ contract StakedBPT is ERC4626, ReentrancyGuard, Owned {
      * @param tokens Array of reward tokens to be transferred.
      */
     function transferTokens(address[] memory tokens) internal nonReentrant {
-        for (uint256 i; i < tokens.length; ) {
+        for (uint256 i; i < tokens.length; i = _inc(i)) {
             ERC20(tokens[i]).safeTransfer(treasury, IERC20(tokens[i]).balanceOf(address(this)));
-            unchecked {
-                ++i;
-            }
         }
     }
 
@@ -211,7 +205,7 @@ contract StakedBPT is ERC4626, ReentrancyGuard, Owned {
     function zapBPT(uint256[] memory amounts, address receiver) external payable nonReentrant returns (uint256 shares) {
         (address[] memory tokens, uint256[] memory balances, ) = bal.getPoolTokens(poolId);
         uint256[] memory decimals = new uint256[](tokens.length);
-        for (uint256 i; i < tokens.length; ) {
+        for (uint256 i; i < tokens.length; i = _inc(i)) {
             require(amounts[i] > 0, "StakedBPT: amount is zero");
             if (tokens[i] == address(weth) && msg.value > 0) {
                 require(amounts[i] == msg.value, "StakedBPT: amount mismatch");
@@ -221,9 +215,6 @@ contract StakedBPT is ERC4626, ReentrancyGuard, Owned {
             }
             decimals[i] = IERC20(tokens[i]).decimals();
             IERC20(tokens[i]).approve(address(bal), amounts[i]);
-            unchecked {
-                i++;
-            }
         }
 
         uint256 bptAmount;
@@ -262,7 +253,7 @@ contract StakedBPT is ERC4626, ReentrancyGuard, Owned {
         afterDeposit(assets, shares);
 
         // refund dust
-        for (uint256 i; i < tokens.length; ) {
+        for (uint256 i; i < tokens.length; i = _inc(i)) {
             address token = tokens[i];
             amount = IERC20(token).balanceOf(address(this));
             // if token is weth, check refund is more than value transfer fee
@@ -270,9 +261,6 @@ contract StakedBPT is ERC4626, ReentrancyGuard, Owned {
                 continue;
             }
             ERC20(token).safeTransfer(msg.sender, amount);
-            unchecked {
-                i++;
-            }
         }
     }
 
@@ -322,12 +310,9 @@ contract StakedBPT is ERC4626, ReentrancyGuard, Owned {
             bal.exitPool(poolId, address(this), payable(address(this)), request);
         }
         amountsOut = new uint256[](tokens.length);
-        for (uint256 i; i < tokens.length; ) {
+        for (uint256 i; i < tokens.length; i = _inc(i)) {
             amountsOut[i] = IERC20(tokens[i]).balanceOf(address(this));
             ERC20(tokens[i]).safeTransfer(receiver, amountsOut[i]);
-            unchecked {
-                i++;
-            }
         }
 
         emit Withdraw(msg.sender, receiver, owner, assets, shares);
@@ -357,5 +342,11 @@ contract StakedBPT is ERC4626, ReentrancyGuard, Owned {
         uint256 totalValue = (balances[0] * price0in1 + balances[1] * 10 ** 18) / 10 ** 18;
         uint256 multiplier = inputValue / totalValue;
         bptOut = (totalShares * multiplier) / 10 ** 18;
+    }
+
+    function _inc(uint256 i) internal pure returns (uint256 j) {
+        unchecked {
+            j = i + 1;
+        }
     }
 }
