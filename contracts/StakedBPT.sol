@@ -177,9 +177,12 @@ contract StakedBPT is ERC4626, ReentrancyGuard, Owned {
         uint256 len = IBasicRewards(pool).extraRewardsLength();
         address[] memory rewardTokens = new address[](len + 1);
         rewardTokens[0] = IBasicRewards(pool).rewardToken();
-        for (uint256 i; i < len; i++) {
+        for (uint256 i; i < len; ) {
             IStash stash = IStash(IVirtualRewards(IBasicRewards(pool).extraRewards(i)).rewardToken());
             rewardTokens[i + 1] = stash.baseToken();
+            unchecked {
+                i++;
+            }
         }
 
         transferTokens(rewardTokens);
@@ -208,7 +211,7 @@ contract StakedBPT is ERC4626, ReentrancyGuard, Owned {
     function zapBPT(uint256[] memory amounts, address receiver) external payable nonReentrant returns (uint256 shares) {
         (address[] memory tokens, uint256[] memory balances, ) = bal.getPoolTokens(poolId);
         uint256[] memory decimals = new uint256[](tokens.length);
-        for (uint256 i; i < tokens.length; i++) {
+        for (uint256 i; i < tokens.length; ) {
             require(amounts[i] > 0, "StakedBPT: amount is zero");
             if (tokens[i] == address(weth) && msg.value > 0) {
                 require(amounts[i] == msg.value, "StakedBPT: amount mismatch");
@@ -218,6 +221,9 @@ contract StakedBPT is ERC4626, ReentrancyGuard, Owned {
             }
             decimals[i] = IERC20(tokens[i]).decimals();
             IERC20(tokens[i]).approve(address(bal), amounts[i]);
+            unchecked {
+                i++;
+            }
         }
 
         uint256 bptAmount;
@@ -256,8 +262,17 @@ contract StakedBPT is ERC4626, ReentrancyGuard, Owned {
         afterDeposit(assets, shares);
 
         // refund dust
-        for (uint256 i; i < tokens.length; i++) {
-            ERC20(tokens[i]).safeTransfer(msg.sender, IERC20(tokens[i]).balanceOf(address(this)));
+        for (uint256 i; i < tokens.length; ) {
+            address token = tokens[i];
+            amount = IERC20(token).balanceOf(address(this));
+            // if token is weth, check refund is more than value transfer fee
+            if (token == address(weth) && 50000 * block.basefee > amount) {
+                continue;
+            }
+            ERC20(token).safeTransfer(msg.sender, amount);
+            unchecked {
+                i++;
+            }
         }
     }
 
@@ -307,9 +322,12 @@ contract StakedBPT is ERC4626, ReentrancyGuard, Owned {
             bal.exitPool(poolId, address(this), payable(address(this)), request);
         }
         amountsOut = new uint256[](tokens.length);
-        for (uint256 i; i < tokens.length; i++) {
+        for (uint256 i; i < tokens.length; ) {
             amountsOut[i] = IERC20(tokens[i]).balanceOf(address(this));
             ERC20(tokens[i]).safeTransfer(receiver, amountsOut[i]);
+            unchecked {
+                i++;
+            }
         }
 
         emit Withdraw(msg.sender, receiver, owner, assets, shares);
