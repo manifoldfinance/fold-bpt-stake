@@ -11,4 +11,6 @@ interface ICrvDepositor {
     function withdraw(uint256 pid, uint256 assets) external;
 
     function earmarkRewards(uint256 pid) external;
+
+    function withdraw(uint256 pid, uint256 assets) external;
 }
