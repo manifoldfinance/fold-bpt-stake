@@ -60,11 +60,12 @@ contract StakedBPT is StakedPT {
     function zapBPT(uint256[] memory amounts, address receiver) external payable nonReentrant returns (uint256 shares) {
         (address[] memory tokens, uint256[] memory balances, ) = bal.getPoolTokens(poolId);
         uint256[] memory decimals = new uint256[](tokens.length);
+        uint256 value = msg.value;
         for (uint256 i; i < tokens.length; i = _inc(i)) {
             require(amounts[i] > 0, "StakedBPT: amount is zero");
-            if (tokens[i] == address(weth) && msg.value > 0) {
-                require(amounts[i] == msg.value, "StakedBPT: amount mismatch");
-                weth.deposit{value: msg.value}();
+            if (tokens[i] == address(weth) && value > 0) {
+                require(amounts[i] == value, "StakedBPT: amount mismatch");
+                weth.deposit{value: value}();
             } else {
                 ERC20(tokens[i]).safeTransferFrom(msg.sender, address(this), amounts[i]);
             }
@@ -194,8 +195,7 @@ contract StakedBPT is StakedPT {
         } else {
             inputValue = amounts[1] * 10 ** 18;
         }
-        uint256 totalValue = (balances[0] * price0in1 + balances[1] * 10 ** 18) / 10 ** 18;
-        uint256 multiplier = inputValue / totalValue;
-        bptOut = (totalShares * multiplier) / 10 ** 18;
+        uint256 totalValue = balances[0] * price0in1 + balances[1] * 10 ** 18;
+        bptOut = (totalShares * inputValue) / totalValue;
     }
 }
