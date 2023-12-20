@@ -50,6 +50,8 @@ abstract contract StakedPT is ERC4626, ReentrancyGuard, Owned {
     // Custom errors
     error ZeroShares();
     error TimeLocked();
+    error AmountMismatch();
+    error WithdrawMoreThanMax();
 
     /**
      * @dev Constructor to initialize the StakedBPT contract.

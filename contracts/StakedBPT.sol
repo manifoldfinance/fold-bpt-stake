@@ -62,9 +62,9 @@ contract StakedBPT is StakedPT {
         uint256[] memory decimals = new uint256[](tokens.length);
         uint256 value = msg.value;
         for (uint256 i; i < tokens.length; i = _inc(i)) {
-            require(amounts[i] > 0, "StakedBPT: amount is zero");
+            // require(amounts[i] > 0, "StakedBPT: amount is zero");
             if (tokens[i] == address(weth) && value > 0) {
-                require(amounts[i] == value, "StakedBPT: amount mismatch");
+                if (amounts[i] != value) revert AmountMismatch();
                 weth.deposit{value: value}();
             } else {
                 ERC20(tokens[i]).safeTransferFrom(msg.sender, address(this), amounts[i]);
@@ -100,7 +100,8 @@ contract StakedBPT is StakedPT {
         uint256 assets = IERC20(cvxtoken).balanceOf(address(this));
 
         // Check for rounding error since we round down in previewDeposit.
-        require((shares = previewDeposit(assets)) != 0, "ZERO_SHARES");
+        shares = previewDeposit(assets);
+        if (shares == 0) revert ZeroShares();
 
         _mint(receiver, shares);
 
@@ -134,7 +135,7 @@ contract StakedBPT is StakedPT {
         address owner,
         uint256[] calldata minAmountsOut
     ) public virtual returns (uint256[] memory amountsOut) {
-        require(shares <= maxRedeem(owner), "ERC4626: withdraw more than max");
+        if (shares > maxRedeem(owner)) revert WithdrawMoreThanMax();
 
         uint256 assets = previewRedeem(shares);
 
@@ -143,7 +144,7 @@ contract StakedBPT is StakedPT {
             if (allowed != type(uint256).max) allowance[owner][msg.sender] = allowed - shares;
         }
 
-        require(lastDepositTimestamp[owner] + minLockDuration <= block.timestamp, "StakedBPT: locked");
+        if (lastDepositTimestamp[owner] + minLockDuration > block.timestamp) revert TimeLocked();
 
         // Receive BPT
         crvRewards.withdraw(assets, false);
