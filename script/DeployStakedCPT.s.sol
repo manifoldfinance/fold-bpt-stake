@@ -2,7 +2,7 @@
 pragma solidity ^0.8.19;
 
 import "forge-std/Script.sol";
-import {StakedCLP} from "contracts/StakedCLP.sol";
+import {StakedCPT} from "contracts/StakedCPT.sol";
 
 contract DeployStakedCLPScript is Script {
     address constant clp = 0x9b77bd0a665F05995b68e36fC1053AFFfAf0d4B5; // Curve.fi Factory Crypto Pool: mevETH/frxETH
@@ -12,17 +12,19 @@ contract DeployStakedCLPScript is Script {
     address constant treasury = 0x617c8dE5BdE54ffbb8d92716CC947858cA38f582; // Multisig
     uint256 constant minLockDuration = 30 days; // 1 month
     uint256 constant pid = 261;
+    address constant weth = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
 
     function run() public {
         address owner = tx.origin;
         vm.startBroadcast();
-        new StakedCLP(
+        new StakedCPT(
             clp,
             cvxtoken,
             booster,
             treasury,
             owner,
             minLockDuration,
+            weth,
             pid
         );
         vm.stopBroadcast();

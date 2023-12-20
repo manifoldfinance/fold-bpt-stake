@@ -13,6 +13,11 @@ contract DeployStakedBPTScript is Script {
     uint256 constant minLockDuration = 30 days; // 1 month
     // address constant owner = 0x617c8dE5BdE54ffbb8d92716CC947858cA38f582; // Multisig
     uint256 constant pid = 170;
+    bytes32 constant poolId =
+        0xb3b675a9a3cb0df8f66caf08549371bfb76a9867000200000000000000000611;
+
+    address constant weth = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
+    address constant _vault = 0xBA12222222228d8Ba445958a75a0704d566BF2C8;
 
     function run() public {
         address owner = tx.origin;
@@ -24,7 +29,10 @@ contract DeployStakedBPTScript is Script {
             treasury,
             owner,
             minLockDuration,
-            pid
+            weth,
+            _vault,
+            pid,
+            poolId
         );
         vm.stopBroadcast();
     }
