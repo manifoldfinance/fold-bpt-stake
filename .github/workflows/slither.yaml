@@ -1,7 +1,10 @@
 name: Slither analysis
 
 # Controls when the action will run. 
-on: [push]
+on:
+  push:
+    paths:
+    - 'contracts/**/*.sol'
 
 # ensure multiple CI processes are not running analysis on contracts
 concurrency:
