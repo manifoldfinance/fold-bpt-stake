@@ -25,22 +25,27 @@ import "./interfaces/IBPT.sol";
 contract StakedBPT is ERC4626, ReentrancyGuard, Owned {
     using SafeTransferLib for ERC20;
 
+    // Immutables
+    /// @notice underlying token(ex. the curve lp token)
     address public immutable lptoken;
+    /// @notice convex deposit token(a 1:1 token representing an lp deposit)
     address public immutable cvxtoken;
+    /// @notice main deposit contract for LP tokens
     IBooster public immutable booster;
+    /// @notice main reward contract for the pool
     IRewards public immutable crvRewards;
-
-    uint256 public immutable pid;
-
-    // address public immutable bpt;
-    // address public immutable auraBal;
-    // address public immutable depositor;
-    // address public immutable pool;
+    /// @notice Wrapped Ether (WETH) contract
     IWETH public immutable weth;
+    /// @notice Balancer Vault contract
     IVault public immutable bal;
+    /// @notice Pool ID in the rewards pool contract
+    uint256 public immutable pid;
+    /// @notice Pool ID for Balancer pool
+    bytes32 public immutable poolId;
+
+    // Globals
     address public treasury;
     uint256 public minLockDuration;
-    bytes32 public immutable poolId;
     mapping(address => uint256) public lastDepositTimestamp;
 
     // Events
@@ -54,7 +59,7 @@ contract StakedBPT is ERC4626, ReentrancyGuard, Owned {
     /**
      * @dev Constructor to initialize the StakedBPT contract.
      * @param _lptoken Address of the LP token
-     * @param _cvxtoken Address of the reward token (AUR / CVX)
+     * @param _cvxtoken convex deposit token(a 1:1 token representing an lp deposit)
      * @param _booster Address of the booster contract
      * @param _treasury Address of the treasury
      * @param _owner Address of the contract owner
