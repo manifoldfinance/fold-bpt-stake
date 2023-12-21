@@ -292,4 +292,33 @@ abstract contract StakedPT is ERC4626, ReentrancyGuard, Owned {
             }
         }
     }
+
+    function _updateTransferTimestamp(address account, uint256 shares) internal {
+        // Set the transfer timestamp for the user
+        uint256 newBalance = balanceOf[account];
+        uint256 lastDeposit = lastDepositTimestamp[account];
+        if (newBalance == 0 || lastDeposit < (block.timestamp - lastDeposit)) {
+            lastDepositTimestamp[account] = 0;
+        } else {
+            // multiple deposits, so weight timestamp by amounts
+            unchecked {
+                lastDepositTimestamp[account] =
+                    lastDeposit -
+                    ((block.timestamp - lastDeposit) * shares) /
+                    (newBalance + shares);
+            }
+        }
+    }
+
+    function transfer(address to, uint256 amount) public virtual override returns (bool success) {
+        _updateDepositTimestamp(to, amount);
+        success = super.transfer(to, amount);
+        _updateTransferTimestamp(msg.sender, amount);
+    }
+
+    function transferFrom(address from, address to, uint256 amount) public virtual override returns (bool success) {
+        _updateDepositTimestamp(to, amount);
+        success = super.transferFrom(from, to, amount);
+        _updateTransferTimestamp(from, amount);
+    }
 }

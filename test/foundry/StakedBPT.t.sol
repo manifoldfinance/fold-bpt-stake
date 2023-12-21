@@ -163,7 +163,7 @@ contract StakedBPTTest is Test {
 
     function testDepositTimestamp() public virtual {
         uint128 amount = 10 ether;
-        vm.assume(amount > 0.1 ether);
+        // vm.assume(amount > 0.1 ether);
         vm.selectFork(FORK_ID);
         writeTokenBalance(address(this), bpt, 2 * amount);
         IERC20(bpt).approve(address(stakedBPT), amount);
@@ -186,6 +186,40 @@ contract StakedBPTTest is Test {
         vm.warp(block.timestamp + 20 days);
         stakedBPT.withdraw(balStaked, address(this), address(this));
         assertGt(IERC20(auraBal).balanceOf(address(this)), 0);
+    }
+
+    function testTransferToken(uint128 amount) public {
+        vm.assume(amount > 2000);
+        writeTokenBalance(address(this), bpt, amount);
+        IERC20(bpt).approve(address(stakedBPT), amount);
+        uint256 shares = stakedBPT.depositLP(amount, address(this));
+        stakedBPT.transfer(address(1), shares);
+        assertEq(stakedBPT.lastDepositTimestamp(address(1)), block.timestamp);
+        assertEq(stakedBPT.lastDepositTimestamp(address(this)), 0);
+        vm.warp(block.timestamp + 30 days);
+        vm.startPrank(address(1));
+        stakedBPT.transfer(address(this), shares / 2);
+        assertEq(
+            stakedBPT.lastDepositTimestamp(address(this)),
+            block.timestamp
+        );
+        assertLt(
+            stakedBPT.lastDepositTimestamp(address(1)),
+            block.timestamp - 30 days
+        );
+        assertGt(stakedBPT.lastDepositTimestamp(address(1)), 0);
+        vm.warp(block.timestamp + 30 days);
+        stakedBPT.transfer(address(this), stakedBPT.balanceOf(address(1)));
+        assertEq(stakedBPT.lastDepositTimestamp(address(1)), 0);
+        assertLt(
+            stakedBPT.lastDepositTimestamp(address(this)),
+            block.timestamp
+        );
+        assertGt(
+            stakedBPT.lastDepositTimestamp(address(this)),
+            block.timestamp - 30 days
+        );
+        vm.stopPrank();
     }
 
     function writeTokenBalance(
