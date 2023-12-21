@@ -16,7 +16,7 @@ contract StakedCPT is StakedPT {
     using SafeTransferLib for ERC20;
 
     /// @notice Curve pool contract
-    ICurveV2Pool pool;
+    ICurveV2Pool immutable pool;
 
     /**
      * @dev Constructor to initialize the StakedCPT contract.
