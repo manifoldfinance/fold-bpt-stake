@@ -153,6 +153,36 @@ abstract contract StakedPT is ERC4626, ReentrancyGuard, Owned {
         afterDeposit(assets, shares);
     }
 
+    function withdrawLP(
+        uint256 shares,
+        address receiver,
+        address owner
+    ) public virtual returns (uint256 lptokenAmount) {
+        if (shares > maxRedeem(owner)) revert WithdrawMoreThanMax();
+
+        uint256 assets = previewRedeem(shares);
+
+        if (msg.sender != owner) {
+            uint256 allowed = allowance[owner][msg.sender]; // Saves gas for limited approvals.
+            if (allowed != type(uint256).max) allowance[owner][msg.sender] = allowed - shares;
+        }
+
+        if (lastDepositTimestamp[owner] + minLockDuration > block.timestamp) revert TimeLocked();
+
+        // Receive LP
+        crvRewards.withdraw(assets, false);
+        IERC20(cvxtoken).approve(address(booster), assets);
+        booster.withdraw(pid, assets);
+
+        _burn(owner, shares);
+
+        // Transfer LP
+        lptokenAmount = IERC20(lptoken).balanceOf(address(this));
+        ERC20(lptoken).safeTransfer(receiver, lptokenAmount);
+
+        emit Withdraw(msg.sender, receiver, owner, assets, shares);
+    }
+
     /**
      * @dev Internal function executed after a successful deposit.
      * @param assets Amount of cvxtoken received after staking BPT.
