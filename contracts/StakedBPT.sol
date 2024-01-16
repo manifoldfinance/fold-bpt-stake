@@ -51,14 +51,74 @@ contract StakedBPT is StakedPT {
     }
 
     /**
-     * @dev Zap into the Balancer pool by providing tokens and receiving staked LP tokens in return.
-     *      Assumes: 2 token pool, 18 decimals, one sided liquidity provision (with a trace amount of other token, eg eth)
+     * @notice Calculates alternative token amountIn required for zap
+     * @dev Assumes: 2 token pool, 18 decimals
+     * @param token Token address of known amount in
+     * @param amountIn Known amount In of token
+     * @return amountInAlt Amount In of alternative token required for zap
+     * @return bptOut Expected BPT out amount
+     */
+    function getAltTokenAmountInRequired(
+        address token,
+        uint256 amountIn
+    ) external view returns (uint256 amountInAlt, uint256 bptOut) {
+        (address[] memory tokens, uint256[] memory balances, ) = bal.getPoolTokens(poolId);
+        uint256 totalSupply = ERC20(lptoken).totalSupply();
+        uint256 len = tokens.length;
+        for (uint256 i; i < len; i = _inc(i)) {
+            if (tokens[i] == token) {
+                bptOut = (amountIn * totalSupply) / balances[i];
+                break;
+            }
+        }
+        for (uint256 i; i < len; i = _inc(i)) {
+            if (tokens[i] != token) {
+                amountInAlt = (balances[i] * bptOut) / totalSupply;
+                break;
+            }
+        }
+    }
+
+    /**
+     * @notice Calculates expected amounts out of tokens given bpt amount to redeem
+     * @dev Assumes: 2 token pool, 18 decimals
+     * @param bptOut BPT amount to redeem
+     * @return amountsIn Amounts Out expected for tokens in LP
+     */
+    function calcAllTokensInGivenExactBptOut(uint256 bptOut) external view returns (uint256[] memory amountsIn) {
+        /************************************************************************************
+        // tokensInForExactBptOut                                                          //
+        //                              /   bptOut   \                                     //
+        // amountsIn[i] = balances[i] * | ------------ |                                   //
+        //                              \  totalBPT  /                                     //
+        ************************************************************************************/
+        // We adjust the order of operations to minimize error amplification, assuming that
+        // balances[i], totalBPT > 1 (which is usually the case).
+        // Tokens in, so we round up overall.
+        (, uint256[] memory balances, ) = bal.getPoolTokens(poolId);
+        uint256 totalBPT = ERC20(lptoken).totalSupply();
+        amountsIn = new uint256[](balances.length);
+        for (uint256 i = 0; i < balances.length; i++) {
+            amountsIn[i] = (balances[i] * bptOut) / totalBPT;
+        }
+
+        return amountsIn;
+    }
+
+    /**
+     * @notice Zap into the Balancer pool by providing tokens and receiving staked LP tokens in return.
+     * @dev Assumes: 2 token pool, 18 decimals, one sided liquidity provision (with a trace amount of other token, eg eth)
      * @param amounts Array of amounts of tokens to be provided.
      * @param receiver Address to receive the staked LP tokens.
+     * @param lptokenAmount Amount of lp to expect.
      * @return shares Number of shares representing the staked LP tokens.
      */
-    function zapBPT(uint256[] memory amounts, address receiver) external payable nonReentrant returns (uint256 shares) {
-        (address[] memory tokens, uint256[] memory balances, ) = bal.getPoolTokens(poolId);
+    function zapBPT(
+        uint256[] calldata amounts,
+        address receiver,
+        uint256 lptokenAmount
+    ) external payable nonReentrant returns (uint256 shares) {
+        (address[] memory tokens, , ) = bal.getPoolTokens(poolId);
         uint256[] memory decimals = new uint256[](tokens.length);
         uint256 value = msg.value;
         for (uint256 i; i < tokens.length; i = _inc(i)) {
@@ -71,13 +131,6 @@ contract StakedBPT is StakedPT {
             }
             decimals[i] = IERC20(tokens[i]).decimals();
             IERC20(tokens[i]).approve(address(bal), amounts[i]);
-        }
-
-        uint256 lptokenAmount;
-        {
-            uint256 lptokenTotalSupply = IBPT(lptoken).totalSupply();
-            uint256 price = IBPT(lptoken).getPrice();
-            lptokenAmount = calculateBptDesired(lptokenTotalSupply, price, balances, amounts);
         }
 
         bytes memory userData = abi.encode(3, lptokenAmount);
@@ -173,30 +226,5 @@ contract StakedBPT is StakedPT {
         }
 
         emit Withdraw(msg.sender, receiver, owner, assets, shares);
-    }
-
-    /**
-     * @dev Calculate the desired amount of BPT to be received when zapping into a Balancer pool.
-     *      Simplified lptokenOut calculation modified from https://github.com/gyrostable/app/blob/main/src/utils/pools/calculateBptDesired.ts
-     * @param totalShares Total supply of the BPT token.
-     * @param price0in1 Price of token0 in terms of token1.
-     * @param balances Array of token balances in the Balancer pool.
-     * @param amounts Array of token amounts being provided.
-     * @return bptOut Desired amount of BPT to be received.
-     */
-    function calculateBptDesired(
-        uint256 totalShares,
-        uint256 price0in1,
-        uint256[] memory balances,
-        uint256[] memory amounts
-    ) internal pure returns (uint256 bptOut) {
-        uint256 inputValue;
-        if (amounts[0] > amounts[1]) {
-            inputValue = amounts[0] * price0in1;
-        } else {
-            inputValue = amounts[1] * 10 ** 18;
-        }
-        uint256 totalValue = balances[0] * price0in1 + balances[1] * 10 ** 18;
-        bptOut = (totalShares * inputValue) / totalValue;
     }
 }
