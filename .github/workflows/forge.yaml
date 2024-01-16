@@ -1,7 +1,10 @@
 name: Forge tests
 
 # Controls when the action will run. 
-on: [push]
+on:
+  push:
+    paths:
+    - 'contracts/**/*.sol'
 
 env:
   RPC_MAINNET: ${{ secrets.RPC_MAINNET }}

@@ -5,7 +5,7 @@ pragma solidity ^0.8.19;
 import "forge-std/Test.sol";
 
 import {IWETH} from "./interfaces/IWETH.sol";
-import {IBasicRewards} from "contracts/interfaces/IBasicRewards.sol";
+import {IRewards} from "contracts/interfaces/IRewards.sol";
 import {IAsset, IVault} from "./interfaces/IVault.sol";
 import {IERC20, StakedBPT} from "contracts/StakedBPT.sol";
 
@@ -39,10 +39,9 @@ contract StakedBPTTest is Test {
             bpt,
             auraBal,
             depositor,
-            pool,
             treasury,
-            minLockDuration,
             owner,
+            minLockDuration,
             address(weth),
             address(_vault),
             pid,
@@ -95,16 +94,34 @@ contract StakedBPTTest is Test {
         assertGt(IERC20(mevEth).balanceOf(address(this)), minAmountsOut[0]);
     }
 
-    function testdepositBPT(uint128 amount) public virtual {
+    function testdepositLP(uint128 amount) public virtual {
         vm.assume(amount > 0.1 ether);
         vm.selectFork(FORK_ID);
         writeTokenBalance(address(this), bpt, amount);
         IERC20(bpt).approve(address(stakedBPT), amount);
-        stakedBPT.depositBPT(
+        stakedBPT.depositLP(
             IERC20(bpt).balanceOf(address(this)),
             address(this)
         );
         assertGt(stakedBPT.balanceOf(address(this)), 0);
+    }
+
+    function testWithdrawLP(uint128 amount) public virtual {
+        vm.assume(amount > 0.1 ether);
+        vm.selectFork(FORK_ID);
+        writeTokenBalance(address(this), bpt, amount);
+        IERC20(bpt).approve(address(stakedBPT), amount);
+        stakedBPT.depositLP(
+            IERC20(bpt).balanceOf(address(this)),
+            address(this)
+        );
+        vm.warp(block.timestamp + 60 days);
+        stakedBPT.withdrawLP(
+            stakedBPT.balanceOf(address(this)),
+            address(this),
+            address(this)
+        );
+        assertGt(IERC20(bpt).balanceOf(address(this)), 0);
     }
 
     function testWithdraw(uint128 amount) public virtual {
@@ -112,7 +129,7 @@ contract StakedBPTTest is Test {
         vm.selectFork(FORK_ID);
         writeTokenBalance(address(this), bpt, amount);
         IERC20(bpt).approve(address(stakedBPT), amount);
-        stakedBPT.depositBPT(
+        stakedBPT.depositLP(
             IERC20(bpt).balanceOf(address(this)),
             address(this)
         );
@@ -131,7 +148,7 @@ contract StakedBPTTest is Test {
         vm.selectFork(FORK_ID);
         writeTokenBalance(address(this), bpt, amount);
         IERC20(bpt).approve(address(stakedBPT), amount);
-        stakedBPT.depositBPT(
+        stakedBPT.depositLP(
             IERC20(bpt).balanceOf(address(this)),
             address(this)
         );
@@ -142,6 +159,67 @@ contract StakedBPTTest is Test {
         stakedBPT.harvest();
         // assertGt(IERC20(aura).balanceOf(treasury), auraBalBefore);
         assertGt(IERC20(bal).balanceOf(treasury), balBalBefore);
+    }
+
+    function testDepositTimestamp() public virtual {
+        uint128 amount = 10 ether;
+        // vm.assume(amount > 0.1 ether);
+        vm.selectFork(FORK_ID);
+        writeTokenBalance(address(this), bpt, 2 * amount);
+        IERC20(bpt).approve(address(stakedBPT), amount);
+        stakedBPT.depositLP(amount, address(this));
+        uint256 balStaked = stakedBPT.balanceOf(address(this));
+        vm.expectRevert();
+        stakedBPT.withdraw(balStaked, address(this), address(this));
+        // warp 10 days (i.e. less than min lockup)
+        vm.warp(block.timestamp + 10 days);
+        IERC20(bpt).approve(address(stakedBPT), amount);
+        stakedBPT.depositLP(
+            IERC20(bpt).balanceOf(address(this)),
+            address(this)
+        );
+        // warp to full 30 days from original deposit
+        vm.warp(block.timestamp + 20 days);
+        balStaked = stakedBPT.balanceOf(address(this));
+        vm.expectRevert();
+        stakedBPT.withdraw(balStaked, address(this), address(this));
+        vm.warp(block.timestamp + 20 days);
+        stakedBPT.withdraw(balStaked, address(this), address(this));
+        assertGt(IERC20(auraBal).balanceOf(address(this)), 0);
+    }
+
+    function testTransferToken(uint128 amount) public {
+        vm.assume(amount > 2000);
+        writeTokenBalance(address(this), bpt, amount);
+        IERC20(bpt).approve(address(stakedBPT), amount);
+        uint256 shares = stakedBPT.depositLP(amount, address(this));
+        stakedBPT.transfer(address(1), shares);
+        assertEq(stakedBPT.lastDepositTimestamp(address(1)), block.timestamp);
+        assertEq(stakedBPT.lastDepositTimestamp(address(this)), 0);
+        vm.warp(block.timestamp + 30 days);
+        vm.startPrank(address(1));
+        stakedBPT.transfer(address(this), shares / 2);
+        assertEq(
+            stakedBPT.lastDepositTimestamp(address(this)),
+            block.timestamp
+        );
+        assertLt(
+            stakedBPT.lastDepositTimestamp(address(1)),
+            block.timestamp - 30 days
+        );
+        assertGt(stakedBPT.lastDepositTimestamp(address(1)), 0);
+        vm.warp(block.timestamp + 30 days);
+        stakedBPT.transfer(address(this), stakedBPT.balanceOf(address(1)));
+        assertEq(stakedBPT.lastDepositTimestamp(address(1)), 0);
+        assertLt(
+            stakedBPT.lastDepositTimestamp(address(this)),
+            block.timestamp
+        );
+        assertGt(
+            stakedBPT.lastDepositTimestamp(address(this)),
+            block.timestamp - 30 days
+        );
+        vm.stopPrank();
     }
 
     function writeTokenBalance(
