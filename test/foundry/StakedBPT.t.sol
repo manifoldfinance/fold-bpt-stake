@@ -56,12 +56,14 @@ contract StakedBPTTest is Test {
         // _depositEthForBPT(amount);
         writeTokenBalance(address(this), mevEth, amount);
         IERC20(mevEth).approve(address(stakedBPT), amount);
+        (uint256 altAmount, uint256 bptOut) = stakedBPT
+            .getAltTokenAmountInRequired(mevEth, amount);
         uint256[] memory amounts = new uint256[](2);
         amounts[0] = amount;
-        amounts[1] = 0.0001 ether;
+        amounts[1] = altAmount;
         vm.deal(address(this), amounts[1]);
-        stakedBPT.zapBPT{value: amounts[1]}(amounts, address(this));
-        assertGt(stakedBPT.balanceOf(address(this)), 0);
+        stakedBPT.zapBPT{value: amounts[1]}(amounts, address(this), bptOut);
+        assertGt(stakedBPT.balanceOf(address(this)), (bptOut * 98) / 100);
     }
 
     function testZipBpt(uint128 amount) public virtual {
@@ -71,19 +73,23 @@ contract StakedBPTTest is Test {
         // _depositEthForBPT(amount);
         writeTokenBalance(address(this), mevEth, amount);
         IERC20(mevEth).approve(address(stakedBPT), amount);
+        (uint256 altAmount, uint256 bptOut) = stakedBPT
+            .getAltTokenAmountInRequired(mevEth, amount);
         uint256[] memory amounts = new uint256[](2);
         amounts[0] = amount;
-        amounts[1] = 0.0001 ether;
+        amounts[1] = altAmount;
         vm.deal(address(this), amounts[1]);
         uint256 stakedAuraBPT = stakedBPT.zapBPT{value: amounts[1]}(
             amounts,
-            address(this)
+            address(this),
+            bptOut
         );
         vm.warp(block.timestamp + 60 days);
         stakedBPT.approve(address(stakedBPT), stakedAuraBPT);
-        uint256[] memory minAmountsOut = new uint256[](2);
-        minAmountsOut[0] = (amount * 95) / 100;
-        minAmountsOut[1] = 0;
+        uint256[] memory minAmountsOut = stakedBPT
+            .calcAllTokensInGivenExactBptOut(stakedAuraBPT);
+        minAmountsOut[0] = (minAmountsOut[0] * 98) / 100;
+        minAmountsOut[1] = (minAmountsOut[1] * 98) / 100;
         stakedBPT.zipBPT(
             stakedAuraBPT,
             address(this),
