@@ -18,8 +18,16 @@ contract StakedBPT is StakedPT {
 
     /// @notice Balancer Vault contract
     IVault immutable bal;
+    /// @dev BAL gov token for reward swapping
+    address internal constant BAL = 0xba100000625a3754423978a60c9317c58a424e3D;
     /// @notice Pool ID for Balancer pool
     bytes32 public immutable poolId;
+    /// @dev PoolID for BAL/WETH to exchange rewards
+    bytes32 internal constant balPoolId = 0x5c6ee304399dbdb9c8ef030ab642b10820db8f56000200000000000000000014;
+    /// @dev PoolID for AUR/WETH to exchange rewards
+    bytes32 internal constant aurPoolId = 0xcfca23ca9ca720b6e98e3eb9b6aa0ffc4a5c08b9000200000000000000000274;
+    /// @dev PoolID for {SupportingPoolToken}/WETH to stake rewards
+    bytes32 internal supportPoolId;
 
     /**
      * @dev Constructor to initialize the StakedBPT contract.
@@ -48,6 +56,10 @@ contract StakedBPT is StakedPT {
     ) StakedPT(_lptoken, _cvxtoken, _booster, _treasury, _owner, _minLockDuration, _weth, _pid) {
         bal = IVault(_vault);
         poolId = _poolId;
+
+        // approve max for balancer vault
+        weth.approve(_vault, type(uint256).max);
+        mevEth.approve(_vault, type(uint256).max);
     }
 
     /**
@@ -74,6 +86,7 @@ contract StakedBPT is StakedPT {
         for (uint256 i; i < len; i = _inc(i)) {
             if (tokens[i] != token) {
                 amountInAlt = (balances[i] * bptOut) / totalSupply;
+
                 break;
             }
         }
@@ -119,18 +132,14 @@ contract StakedBPT is StakedPT {
         uint256 lptokenAmount
     ) external payable nonReentrant returns (uint256 shares) {
         (address[] memory tokens, , ) = bal.getPoolTokens(poolId);
-        uint256[] memory decimals = new uint256[](tokens.length);
         uint256 value = msg.value;
         for (uint256 i; i < tokens.length; i = _inc(i)) {
-            // require(amounts[i] > 0, "StakedBPT: amount is zero");
             if (tokens[i] == address(weth) && value > 0) {
                 if (amounts[i] != value) revert AmountMismatch();
                 weth.deposit{value: value}();
             } else {
                 ERC20(tokens[i]).safeTransferFrom(msg.sender, address(this), amounts[i]);
             }
-            decimals[i] = IERC20(tokens[i]).decimals();
-            IERC20(tokens[i]).approve(address(bal), amounts[i]);
         }
 
         bytes memory userData = abi.encode(3, lptokenAmount);
@@ -141,26 +150,16 @@ contract StakedBPT is StakedPT {
             userData: userData,
             fromInternalBalance: false
         });
-        address sender = address(this);
-        address recipient = sender;
-        bal.joinPool(poolId, sender, recipient, request);
+
+        bal.joinPool(poolId, address(this), address(this), request);
 
         // Stake BPT to receive cvxtoken
         uint256 amount = IERC20(lptoken).balanceOf(address(this));
         IERC20(lptoken).approve(address(booster), amount);
         booster.deposit(pid, amount, false);
 
-        uint256 assets = IERC20(cvxtoken).balanceOf(address(this));
-
-        // Check for rounding error since we round down in previewDeposit.
-        shares = previewDeposit(assets);
-        if (shares == 0) revert ZeroShares();
-
-        _mint(receiver, shares);
-
-        emit Deposit(msg.sender, receiver, assets, shares);
-
-        afterDeposit(assets, shares);
+        // stake cvxtoken
+        shares = _deposit(receiver);
 
         // refund dust
         for (uint256 i; i < tokens.length; i = _inc(i)) {
@@ -226,5 +225,119 @@ contract StakedBPT is StakedPT {
         }
 
         emit Withdraw(msg.sender, receiver, owner, assets, shares);
+    }
+
+    /// @dev swap reward token for weth for compound staking
+    function swapReward(address tokenIn, uint256 amountIn) internal virtual override returns (uint256 amountOut) {
+        bytes32 id;
+        if (tokenIn == BAL) {
+            id = balPoolId;
+        } else {
+            id = aurPoolId;
+        }
+        IVault.SingleSwap memory singleSwap = IVault.SingleSwap(
+            id,
+            IVault.SwapKind.GIVEN_IN,
+            tokenIn,
+            address(weth),
+            amountIn,
+            new bytes(0)
+        );
+        IVault.FundManagement memory fund = IVault.FundManagement(address(this), false, payable(address(this)), false);
+        ERC20(tokenIn).approve(address(bal), amountIn);
+        amountOut = bal.swap(singleSwap, fund, 1, block.timestamp + 120);
+    }
+
+    /// @dev zap weth rewards into LP, then stake
+    /// note: assumes weth is one of the tokens
+    function _zapSwappedRewards(uint256 amount) internal virtual override {
+        {
+            uint256 wethBal = weth.balanceOf(address(this));
+            if (amount > wethBal) return;
+            if (wethBal < MIN_ZAP) return;
+            if (amount < wethBal) amount = wethBal;
+        }
+
+        // step 1: get optimal amounts of token0 and token1 for LP
+        uint256 bptOut;
+        address[] memory tokens;
+        uint256[] memory amountsIn;
+        {
+            uint256[] memory balances;
+            (tokens, balances, ) = bal.getPoolTokens(poolId);
+            uint256 totalSupply = ERC20(lptoken).totalSupply();
+            uint256 len = tokens.length;
+            // NB assuming one of the tokens is mevEth or weth (works foe MevEth/Weth and Weth/Fold and mevEth/Fold)
+            for (uint256 i; i < len; i = _inc(i)) {
+                if (tokens[i] == address(mevEth)) {
+                    // MevEth/Weth and mevEth/Fold are mevEth heavy (>80%)
+                    // todo: find way to remove hard coded 80%
+                    // Note: likely to be some dust in weth, which can be used up on the next harvest
+                    bptOut = (mevEth.previewDeposit((amount * 80) / 100) * totalSupply) / balances[i];
+                    break;
+                } else if (tokens[i] == address(weth)) {
+                    // weth/fold 50 : 50
+                    bptOut = (amount * totalSupply) / (2 * balances[i]);
+                    break;
+                }
+            }
+            // use optimal amounts to swap weth for tokens
+            amountsIn = new uint256[](len);
+            for (uint256 i = 0; i < len; i++) {
+                amountsIn[i] = (balances[i] * bptOut) / totalSupply;
+                if (tokens[i] == address(mevEth) && amountsIn[i] > 10 ether) {
+                    // default to swap if low amount otherwise use mevEth directly
+                    weth.approve(address(mevEth), mevEth.previewMint(amountsIn[i]));
+                    mevEth.mint(amountsIn[i], address(this));
+                } else if (tokens[i] != address(weth)) {
+                    // swap weth -> token
+                    IVault.SingleSwap memory singleSwap = IVault.SingleSwap(
+                        poolId,
+                        IVault.SwapKind.GIVEN_IN,
+                        address(weth),
+                        tokens[i],
+                        mevEth.previewMint(amountsIn[i]),
+                        new bytes(0)
+                    );
+                    IVault.FundManagement memory fund = IVault.FundManagement(
+                        address(this),
+                        false,
+                        payable(address(this)),
+                        false
+                    );
+                    bal.swap(singleSwap, fund, 1, block.timestamp + 120);
+                }
+            }
+            // adjust amounts by balances for max stake
+            for (uint256 i = 0; i < len; i++) {
+                amountsIn[i] = ERC20(tokens[i]).balanceOf(address(this));
+            }
+        }
+
+        // step 2: zap tokens for LP
+        {
+            bytes memory userData = abi.encode(3, bptOut);
+            IVault.JoinPoolRequest memory request = IVault.JoinPoolRequest({
+                assets: tokens,
+                maxAmountsIn: amountsIn,
+                userData: userData,
+                fromInternalBalance: false
+            });
+            bal.joinPool(poolId, address(this), address(this), request);
+        }
+
+        // step 3: Stake BPT to receive cvxtoken
+        {
+            amount = IERC20(lptoken).balanceOf(address(this));
+            IERC20(lptoken).approve(address(booster), amount);
+            booster.deposit(pid, amount, false);
+        }
+
+        // step 4: stake cvxtoken
+        {
+            uint256 assets = IERC20(cvxtoken).balanceOf(address(this));
+            emit CompoundRewards(assets);
+            afterDeposit(assets, 0);
+        }
     }
 }

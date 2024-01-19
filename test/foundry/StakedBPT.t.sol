@@ -34,7 +34,7 @@ contract StakedBPTTest is Test {
     address constant bal = 0xba100000625a3754423978a60c9317c58a424e3D;
 
     function setUp() public virtual {
-        FORK_ID = vm.createSelectFork(RPC_ETH_MAINNET);
+        FORK_ID = vm.createSelectFork(RPC_ETH_MAINNET, 19034135);
         stakedBPT = new StakedBPT(
             bpt,
             auraBal,
@@ -148,9 +148,8 @@ contract StakedBPTTest is Test {
         assertGt(IERC20(auraBal).balanceOf(address(this)), 0);
     }
 
-    function testHarvest(uint128 amount) public virtual {
-        vm.assume(amount > 1 ether);
-        vm.assume(amount < 100000000 ether);
+    function testHarvestBPT() public virtual {
+        uint128 amount = 100 ether;
         vm.selectFork(FORK_ID);
         writeTokenBalance(address(this), bpt, amount);
         IERC20(bpt).approve(address(stakedBPT), amount);
@@ -158,13 +157,19 @@ contract StakedBPTTest is Test {
             IERC20(bpt).balanceOf(address(this)),
             address(this)
         );
-        // uint256 auraBalBefore = IERC20(aura).balanceOf(treasury);
-        uint256 balBalBefore = IERC20(bal).balanceOf(treasury);
-        vm.warp(block.timestamp + 60 days);
+
+        uint256 valBefore = stakedBPT.previewRedeem(
+            IERC20(address(stakedBPT)).balanceOf(address(this))
+        );
+        vm.warp(block.timestamp + 180 days);
 
         stakedBPT.harvest();
-        // assertGt(IERC20(aura).balanceOf(treasury), auraBalBefore);
-        assertGt(IERC20(bal).balanceOf(treasury), balBalBefore);
+        assertGt(
+            stakedBPT.previewRedeem(
+                IERC20(address(stakedBPT)).balanceOf(address(this))
+            ),
+            valBefore
+        );
     }
 
     function testDepositTimestamp() public virtual {

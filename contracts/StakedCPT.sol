@@ -17,6 +17,12 @@ contract StakedCPT is StakedPT {
 
     /// @notice Curve pool contract
     ICurveV2Pool immutable pool;
+    /// @dev CRV address
+    address internal constant CRV = 0xD533a949740bb3306d119CC777fa900bA034cd52;
+    /// @dev Curve CRV/WETH pool for swapping rewards out
+    ICurveV2Pool internal constant crvPool = ICurveV2Pool(0x4eBdF703948ddCEA3B11f675B4D1Fba9d2414A14);
+    /// @dev Curve CVX/WETH pool for swapping rewards out
+    ICurveV2Pool internal constant cvxPool = ICurveV2Pool(0xB576491F1E6e5E62f1d8F26062Ee822B40B0E0d4);
 
     /**
      * @dev Constructor to initialize the StakedCPT contract.
@@ -42,6 +48,9 @@ contract StakedCPT is StakedPT {
         address _pool
     ) StakedPT(_lptoken, _cvxtoken, _booster, _treasury, _owner, _minLockDuration, _weth, _pid) {
         pool = ICurveV2Pool(_pool);
+
+        weth.approve(address(mevEth), type(uint256).max);
+        mevEth.approve(_pool, type(uint256).max);
     }
 
     /**
@@ -77,17 +86,8 @@ contract StakedCPT is StakedPT {
         IERC20(lptoken).approve(address(booster), lptokenAmount);
         booster.deposit(pid, lptokenAmount, false);
 
-        uint256 assets = IERC20(cvxtoken).balanceOf(address(this));
-
-        // Check for rounding error since we round down in previewDeposit.
-        shares = previewDeposit(assets);
-        if (shares == 0) revert ZeroShares();
-
-        _mint(receiver, shares);
-
-        emit Deposit(msg.sender, receiver, assets, shares);
-
-        afterDeposit(assets, shares);
+        // stake cvxtoken
+        shares = _deposit(receiver);
 
         // refund dust
         for (uint256 i; i < tokens.length; i = _inc(i)) {
@@ -156,5 +156,60 @@ contract StakedCPT is StakedPT {
     function _getStashToken(address virtualRewards) internal override returns (address stashToken) {
         address stash = IVirtualRewards(virtualRewards).rewardToken();
         stashToken = ITokenWrapper(stash).token();
+    }
+
+    /// @dev swap reward token for weth for compound staking
+    function swapReward(address tokenIn, uint256 amountIn) internal virtual override returns (uint256 amountOut) {
+        if (tokenIn == CRV) {
+            // CRV
+            ERC20(tokenIn).approve(address(crvPool), amountIn);
+            amountOut = crvPool.exchange(2, 1, amountIn, 1, false, address(this));
+        } else {
+            // assume CVX
+            ERC20(tokenIn).approve(address(cvxPool), amountIn);
+            amountOut = cvxPool.exchange(1, 0, amountIn, 1, false);
+            // weth.deposit{value: amountOut}();
+        }
+    }
+
+    /// @dev zap weth rewards into LP, then stake
+    /// note: assumes weth is one of the tokens
+    function _zapSwappedRewards(uint256 amount) internal virtual override {
+        {
+            uint256 wethBal = weth.balanceOf(address(this));
+            if (amount > wethBal) return;
+            if (wethBal < MIN_ZAP) return;
+            if (amount < wethBal) amount = wethBal;
+        }
+
+        // step 1: swap weth for mevEth fully
+        uint256 shares = mevEth.deposit(amount, address(this));
+        uint256[2] memory amounts;
+        {
+            address[2] memory tokens;
+            tokens[0] = pool.coins(0);
+            tokens[1] = pool.coins(1);
+            for (uint256 i; i < tokens.length; i = _inc(i)) {
+                if (tokens[i] == address(mevEth)) {
+                    amounts[i] = shares;
+                }
+            }
+        }
+
+        // step 2: zap tokens for LP
+        {
+            uint256 lptokenAmount = pool.calc_token_amount(amounts);
+            lptokenAmount = pool.add_liquidity(amounts, (lptokenAmount * 99) / 100, false, address(this));
+            // step 3: Stake CPT to receive cvxtoken
+            IERC20(lptoken).approve(address(booster), lptokenAmount);
+            booster.deposit(pid, lptokenAmount, false);
+        }
+
+        // step 4: stake cvxtoken
+        {
+            uint256 assets = IERC20(cvxtoken).balanceOf(address(this));
+            emit CompoundRewards(assets);
+            afterDeposit(assets, 0);
+        }
     }
 }

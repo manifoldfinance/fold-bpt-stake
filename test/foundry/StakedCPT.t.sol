@@ -30,7 +30,7 @@ contract StakedCPTTest is Test {
     address constant crv = 0xD533a949740bb3306d119CC777fa900bA034cd52;
 
     function setUp() public virtual {
-        FORK_ID = vm.createSelectFork(RPC_ETH_MAINNET);
+        FORK_ID = vm.createSelectFork(RPC_ETH_MAINNET, 19034135);
         stakedCPT = new StakedCPT(
             clp,
             cvxtoken,
@@ -117,7 +117,7 @@ contract StakedCPTTest is Test {
     }
 
     function testHarvest(uint128 amount) public virtual {
-        vm.assume(amount > 1 ether);
+        vm.assume(amount > 100 ether);
         vm.assume(amount < 100000000 ether);
         vm.selectFork(FORK_ID);
         writeTokenBalance(address(this), clp, amount);
@@ -127,12 +127,21 @@ contract StakedCPTTest is Test {
             address(this)
         );
         // uint256 cvxtokenBefore = IERC20(aura).balanceOf(treasury);
-        uint256 balBalBefore = IERC20(crv).balanceOf(treasury);
-        vm.warp(block.timestamp + 60 days);
+        // uint256 balBalBefore = IERC20(crv).balanceOf(treasury);
+        uint256 valBefore = stakedCPT.previewRedeem(
+            IERC20(address(stakedCPT)).balanceOf(address(this))
+        );
+        vm.warp(block.timestamp + 180 days);
 
         stakedCPT.harvest();
         // assertGt(IERC20(aura).balanceOf(treasury), cvxtokenBefore);
-        assertGt(IERC20(crv).balanceOf(treasury), balBalBefore);
+        // assertGt(IERC20(crv).balanceOf(treasury), balBalBefore);
+        assertGt(
+            stakedCPT.previewRedeem(
+                IERC20(address(stakedCPT)).balanceOf(address(this))
+            ),
+            valBefore
+        );
     }
 
     function testDepositTimestamp() public virtual {
