@@ -26,8 +26,6 @@ contract StakedBPT is StakedPT {
     bytes32 internal constant balPoolId = 0x5c6ee304399dbdb9c8ef030ab642b10820db8f56000200000000000000000014;
     /// @dev PoolID for AUR/WETH to exchange rewards
     bytes32 internal constant aurPoolId = 0xcfca23ca9ca720b6e98e3eb9b6aa0ffc4a5c08b9000200000000000000000274;
-    /// @dev PoolID for {SupportingPoolToken}/WETH to stake rewards
-    bytes32 internal supportPoolId;
 
     /**
      * @dev Constructor to initialize the StakedBPT contract.
