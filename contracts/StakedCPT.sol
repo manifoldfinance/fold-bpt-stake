@@ -80,7 +80,7 @@ contract StakedCPT is StakedPT {
 
         uint256 lptokenAmount = pool.calc_token_amount(amounts);
 
-        lptokenAmount = pool.add_liquidity(amounts, (lptokenAmount * 99) / 100, false, address(this));
+        lptokenAmount = pool.add_liquidity(amounts, lptokenAmount - 1, false, address(this));
 
         // Stake CPT to receive cvxtoken
         IERC20(lptoken).approve(address(booster), lptokenAmount);
@@ -199,7 +199,7 @@ contract StakedCPT is StakedPT {
         // step 2: zap tokens for LP
         {
             uint256 lptokenAmount = pool.calc_token_amount(amounts);
-            lptokenAmount = pool.add_liquidity(amounts, (lptokenAmount * 99) / 100, false, address(this));
+            lptokenAmount = pool.add_liquidity(amounts, lptokenAmount - 1, false, address(this));
             // step 3: Stake CPT to receive cvxtoken
             IERC20(lptoken).approve(address(booster), lptokenAmount);
             booster.deposit(pid, lptokenAmount, false);
