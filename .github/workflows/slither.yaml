@@ -5,6 +5,7 @@ on:
   push:
     paths:
     - 'contracts/**/*.sol'
+    - '.github/workflows/**/*.yaml'
 
 # ensure multiple CI processes are not running analysis on contracts
 concurrency:
