@@ -68,8 +68,7 @@ contract StakedCPTTest is Test {
         uint256[2] memory amounts;
         amounts[0] = 0;
         amounts[1] = amount;
-        // writeTokenBalance(address(this), frxEth, 0.0001 ether);
-        // IERC20(frxEth).approve(address(stakedCPT), amount);
+
         uint256 stakedAuraCPT = stakedCPT.zapCPT(amounts, address(this));
         vm.warp(block.timestamp + 60 days);
         stakedCPT.approve(address(stakedCPT), stakedAuraCPT);
@@ -126,16 +125,13 @@ contract StakedCPTTest is Test {
             IERC20(clp).balanceOf(address(this)),
             address(this)
         );
-        // uint256 cvxtokenBefore = IERC20(aura).balanceOf(treasury);
-        // uint256 balBalBefore = IERC20(crv).balanceOf(treasury);
+
         uint256 valBefore = stakedCPT.previewRedeem(
             IERC20(address(stakedCPT)).balanceOf(address(this))
         );
         vm.warp(block.timestamp + 180 days);
 
         stakedCPT.harvest();
-        // assertGt(IERC20(aura).balanceOf(treasury), cvxtokenBefore);
-        // assertGt(IERC20(crv).balanceOf(treasury), balBalBefore);
         assertGt(
             stakedCPT.previewRedeem(
                 IERC20(address(stakedCPT)).balanceOf(address(this))
