@@ -4,7 +4,8 @@ pragma solidity ^0.8.18;
 
 import "./Owned.sol";
 import "./interfaces/IWETH.sol";
-import "./interfaces/INofungiblePositionManager.sol";
+import "./interfaces/INonfungiblePositionManager.sol";
+import "@solmate/utils/ReentrancyGuard.sol";
 
 /**
  * @title StakedUPT
@@ -27,8 +28,8 @@ import "./interfaces/INofungiblePositionManager.sol";
 contract StakedUPT is ReentrancyGuard, Owned {
     // minimum duration of being in the vault before withdraw can be called (triggering reward payment)
     uint public minLockDuration;
-    uint public setWeeklyReward;
-    uint public constant deployed; // timestamp when contract was deployed
+    uint public weeklyReward;
+    uint public immutable deployed; // timestamp when contract was deployed
 
     mapping(uint => uint) public totalsUSDC; // week # -> liquidity
     uint public totalLiquidityUSDC; // in UniV3 liquidity units
@@ -39,7 +40,7 @@ contract StakedUPT is ReentrancyGuard, Owned {
     uint public maxTotalWETH;
 
     IWETH public immutable weth;
-    INonfungiblePositionManager public immutable override nonfungiblePositionManager;
+    INonfungiblePositionManager public immutable nonfungiblePositionManager;
 
     mapping(address => mapping(uint => uint)) public depositTimestamps; // for liquidity providers
 
@@ -60,13 +61,34 @@ contract StakedUPT is ReentrancyGuard, Owned {
     event Deposit(uint tokenId, address owner);
     event Withdrawal(uint tokenId, address owner, uint rewardPaid);
 
+    /* --- Variable container struct  ---
+    Used to hold, return and assign variables inside a function, in order to avoid the error:
+    "CompilerError: Stack too deep". */
+
+    struct LocalVariables_withdraw {
+        uint reward;
+        uint totalThisWeek;
+        address token0;
+        uint liquidity;
+        uint timestamp;
+        uint week_iterator;
+        uint current_week;
+    }
+    struct LocalVariables_deposit {
+        address token0;
+        address token1;
+        uint liquidity;
+        uint current_week;
+        uint week;
+    }
+
     /**
      * @dev Update the weekly reward. Amount in WETH.
      * @param _newReward New weekly reward.
      */
     function setWeeklyReward(uint256 _newReward) external onlyOwner {
-        minLockDuration = _newMinLockDuration;
-        emit SetMinLockDuration(_newReward);
+        weeklyReward = _newReward;
+        emit SetWeeklyReward(_newReward);
     }
 
     /**
@@ -117,120 +139,113 @@ contract StakedUPT is ReentrancyGuard, Owned {
     /**
      * @dev Withdraw UniV3 LP deposit from vault (changing the owner back to original)
      */
-    function withdrawToken(uint256 tokenId) external override {
-        uint reward;
-        uint totalThisWeek;
-
+    function withdrawToken(uint256 tokenId) external {
+        LocalVariables_withdraw memory L;
         // verify that a deposit exists
-        uint timestamp = depositTimestamps[msg.sender][tokenId];
-        require(timestamp > 0, "UniStaker::withdraw: no owner exists for this tokenId");
-
-        uint duration = block.timestamp - timestamp; // how long this deposit has been in the vault
-        require(
-            duration > minLockDuration,
+        L.timestamp = depositTimestamps[msg.sender][tokenId];
+        require(L.timestamp > 0, "UniStaker::withdraw: no owner exists for this tokenId");
+        require( // how long this deposit has been in the vault
+            (block.timestamp - L.timestamp) > minLockDuration,
             "UniStaker::withdraw: minimum duration for the deposit has not elapsed yet"
         );
 
-        uint week_iterator = (timestamp - deployed) / 1 weeks; // staker's first week
-        uint current_week = (block.timestamp - deployed) / 1 weeks;
+        L.week_iterator = (L.timestamp - deployed) / 1 weeks; // staker's first week
+        L.current_week = (block.timestamp - deployed) / 1 weeks;
 
         // transfer ownership back to the original LP token owner
         nonfungiblePositionManager.transferFrom(address(this), msg.sender, tokenId);
-        (, , token0, , , , , liquidity, , , , ) = NFPM.positions(tokenId);
+        (, , L.token0, , , , , L.liquidity, , , , ) = nonfungiblePositionManager.positions(tokenId);
 
-        if (token0 == WETH) {
-            while (week_iterator <= current_week) {
-                totalThisWeek = totalsWETH[week_iterator];
-                if (totalThisWeek > 0) {
+        if (L.token0 == WETH) {
+            while (L.week_iterator <= L.current_week) {
+                L.totalThisWeek = totalsWETH[L.week_iterator];
+                if (L.totalThisWeek > 0) {
                     // need to check lest div by 0
                     // staker's share of rewards for given week
-                    reward += (weeklyReward * liquidity) / totalThisWeek;
+                    L.reward += (weeklyReward * L.liquidity) / L.totalThisWeek;
                 }
-                week_iterator += 1;
+                L.week_iterator += 1;
             }
-            totalsWETH[current_week] -= liquidity;
-            totalLiquidityWETH -= liquidity;
-        } else if (token0 == USDC) {
-            while (week_iterator <= current_week) {
-                totalThisWeek = totalsUSDC[week_iterator];
-                if (totalThisWeek > 0) {
+            totalsWETH[L.current_week] -= L.liquidity;
+            totalLiquidityWETH -= L.liquidity;
+        } else if (L.token0 == USDC) {
+            while (L.week_iterator <= L.current_week) {
+                L.totalThisWeek = totalsUSDC[L.week_iterator];
+                if (L.totalThisWeek > 0) {
                     // need to check lest div by 0
                     // staker's share of rewards for given week
-                    reward += (weeklyReward * liquidity) / totalThisWeek;
+                    L.reward += (weeklyReward * L.liquidity) / L.totalThisWeek;
                 }
-                week_iterator += 1;
+                L.week_iterator += 1;
             }
-            totalsUSDC[current_week] -= liquidity;
-            totalLiquidityUSDC -= liquidity;
+            totalsUSDC[L.current_week] -= L.liquidity;
+            totalLiquidityUSDC -= L.liquidity;
         }
-        weth.transfer(msg.sender, reward);
+        weth.transfer(msg.sender, L.reward);
 
         delete depositTimestamps[msg.sender][tokenId];
 
-        emit Withdrawal(tokenId, msg.sender, reward);
+        emit Withdrawal(tokenId, msg.sender, L.reward);
     }
 
     /**
      * @dev This is one way of treating deposits.
-     * Instead the deposit function implementation,
+     * Instead of deposit function implementation,
      * user might manually transfer their NFT
      * and this would trigger onERC721Received.
      * Stakers underwrite captive insurance for
      * the relay (against outages in mevAuction)
      */
     function deposit(uint tokenId) external {
-        address token0;
-        address token1;
-        uint liquidity;
-
+        LocalVariables_deposit memory L;
         // transfer ownership of LP share to this contract
         nonfungiblePositionManager.transferFrom(msg.sender, address(this), tokenId);
-        (, , token0, token1, , , , liquidity, , , , ) = NFPM.positions(tokenId);
-        require(token1 == FOLD, "UniStaker::deposit: improper token id");
+        (, , L.token0, L.token1, , , , L.liquidity, , , , ) = nonfungiblePositionManager.positions(tokenId);
+        require(L.token1 == FOLD, "UniStaker::deposit: improper token id");
 
         // usually this means that the owner of the position already closed it
-        require(liquidity > 0, "UniStaker::deposit: cannot deposit empty amount");
+        require(L.liquidity > 0, "UniStaker::deposit: cannot deposit empty amount");
 
-        uint current_week = (block.timestamp - deployed) / 1 weeks;
+        L.current_week = (block.timestamp - deployed) / 1 weeks;
 
         // control flow verifies the compatibility of the LP share
-        if (token0 == WETH) {
-            totalLiquidityWETH += liquidity;
+        if (L.token0 == WETH) {
+            totalLiquidityWETH += L.liquidity;
 
             require(totalLiquidityWETH <= maxTotalWETH, "UniStaker::deposit: totalLiquidity exceed max");
 
             // roll over stakes from last week into next week
-            if (totalsWETH[current_week] == 0) {
+            if (totalsWETH[L.current_week] == 0) {
                 // we have just entered a new week
-                uint week = current_week;
+                L.week = L.current_week;
                 // iterate backwards to find the nearest week with an existing total
-                while (week > 0) {
-                    week -= 1;
-                    if (totalsWETH[week]) {
-                        totalsWETH[current_week] = totalsWETH[week];
+                while (L.week > 0) {
+                    L.week -= 1;
+                    if (totalsWETH[L.week] > 0) {
+                        totalsWETH[L.current_week] = totalsWETH[L.week];
                         break;
                     }
                 }
             }
-            totalsWETH[current_week] += liquidity;
-        } else if (token0 == USDC) {
-            totalLiquidityUSDC += liquidity;
+            totalsWETH[L.current_week] += L.liquidity;
+        } else if (L.token0 == USDC) {
+            totalLiquidityUSDC += L.liquidity;
 
             require(totalLiquidityUSDC <= maxTotalUSDC, "UniStaker::deposit: totalLiquidity exceed max");
 
-            if (totalsUSDC[current_week] == 0) {
+            if (totalsUSDC[L.current_week] == 0) {
                 // we have just entered a new week
-                uint week = current_week;
+                L.week = L.current_week;
                 // iterate backwards to find the nearest week with an existing total
-                while (week > 0) {
-                    week -= 1;
-                    if (totalsUSDC[week]) {
-                        totalsUSDC[current_week] = totalsUSDC[week];
+                while (L.week > 0) {
+                    L.week -= 1;
+                    if (totalsUSDC[L.week] > 0) {
+                        totalsUSDC[L.current_week] = totalsUSDC[L.week];
                         break;
                     }
                 }
             }
-            totalsUSDC[current_week] += liquidity;
+            totalsUSDC[L.current_week] += L.liquidity;
         } else {
             require(false, "UniStaker::deposit: improper token id");
         }
