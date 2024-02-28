@@ -119,6 +119,9 @@
   "dependencies": {
     "@layerzerolabs/solidity-examples": "^0.0.13",
     "@openzeppelin/contracts": "^4.9.3",
+    "@uniswap/v3-core": "^1.0.1",
+    "@uniswap/v3-periphery": "^1.4.4",
+    "axios": "^1.6.7",
     "upgrade": "^1.1.0"
   }
 }
