@@ -66,6 +66,9 @@ contract StakedUPT is ReentrancyGuard, Owned {
     "CompilerError: Stack too deep". */
 
     struct LocalVariables_withdraw {
+        address token0;
+        address token1;
+        uint128 liquidity;
         uint reward;
         uint totalThisWeek;
         uint timestamp;
@@ -73,22 +76,11 @@ contract StakedUPT is ReentrancyGuard, Owned {
         uint current_week;
     }
     struct LocalVariables_deposit {
-        uint current_week;
-        uint week;
-    }
-    struct Position {
-        uint96 nonce;
-        address operator;
         address token0;
         address token1;
-        uint24 fee;
-        int24 tickLower;
-        int24 tickUpper;
         uint128 liquidity;
-        uint256 feeGrowthInside0LastX128;
-        uint256 feeGrowthInside1LastX128;
-        uint128 tokensOwed0;
-        uint128 tokensOwed1;
+        uint current_week;
+        uint week;
     }
 
     /**
@@ -149,6 +141,22 @@ contract StakedUPT is ReentrancyGuard, Owned {
         (, , token0, token1, , , , liquidity, , , , ) = nonfungiblePositionManager.positions(tokenId);
     }
 
+    function _rollOverWeek() internal returns (uint current_week) {
+        current_week = (block.timestamp - deployed) / 1 weeks;
+        if (totalsWETH[current_week] == 0) {
+            // we have just entered a new week
+            uint week = current_week;
+            // iterate backwards to find the nearest week with an existing total
+            while (week > 0) {
+                week -= 1;
+                if (totalsWETH[week] > 0) {
+                    totalsWETH[current_week] = totalsWETH[week];
+                    break;
+                }
+            }
+        }
+    }
+
     /**
      * @dev Withdraw UniV3 LP deposit from vault (changing the owner back to original)
      */
@@ -180,7 +188,7 @@ contract StakedUPT is ReentrancyGuard, Owned {
                 }
                 L.week_iterator += 1;
             }
-            totalsWETH[L.current_week] -= L.liquidity;
+            totalsWETH[_rollOverWeek()] -= L.liquidity;
             totalLiquidityWETH -= L.liquidity;
         } else if (L.token0 == USDC) {
             while (L.week_iterator <= L.current_week) {
@@ -192,7 +200,7 @@ contract StakedUPT is ReentrancyGuard, Owned {
                 }
                 L.week_iterator += 1;
             }
-            totalsUSDC[L.current_week] -= L.liquidity;
+            totalsUSDC[_rollOverWeek()] -= L.liquidity;
             totalLiquidityUSDC -= L.liquidity;
         }
         weth.transfer(msg.sender, L.reward);
@@ -223,46 +231,15 @@ contract StakedUPT is ReentrancyGuard, Owned {
         // usually this means that the owner of the position already closed it
         require(L.liquidity > 0, "UniStaker::deposit: cannot deposit empty amount");
 
-        L.current_week = (block.timestamp - deployed) / 1 weeks;
-
         // control flow verifies the compatibility of the LP share
         if (L.token0 == WETH) {
             totalLiquidityWETH += L.liquidity;
-
             require(totalLiquidityWETH <= maxTotalWETH, "UniStaker::deposit: totalLiquidity exceed max");
-
-            // roll over stakes from last week into next week
-            if (totalsWETH[L.current_week] == 0) {
-                // we have just entered a new week
-                L.week = L.current_week;
-                // iterate backwards to find the nearest week with an existing total
-                while (L.week > 0) {
-                    L.week -= 1;
-                    if (totalsWETH[L.week] > 0) {
-                        totalsWETH[L.current_week] = totalsWETH[L.week];
-                        break;
-                    }
-                }
-            }
-            totalsWETH[L.current_week] += L.liquidity;
+            totalsWETH[_rollOverWeek()] += L.liquidity;
         } else if (L.token0 == USDC) {
             totalLiquidityUSDC += L.liquidity;
-
             require(totalLiquidityUSDC <= maxTotalUSDC, "UniStaker::deposit: totalLiquidity exceed max");
-
-            if (totalsUSDC[L.current_week] == 0) {
-                // we have just entered a new week
-                L.week = L.current_week;
-                // iterate backwards to find the nearest week with an existing total
-                while (L.week > 0) {
-                    L.week -= 1;
-                    if (totalsUSDC[L.week] > 0) {
-                        totalsUSDC[L.current_week] = totalsUSDC[L.week];
-                        break;
-                    }
-                }
-            }
-            totalsUSDC[L.current_week] += L.liquidity;
+            totalsUSDC[_rollOverWeek()] += L.liquidity;
         } else {
             require(false, "UniStaker::deposit: improper token id");
         }
