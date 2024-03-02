@@ -1,6 +1,6 @@
 /// SPDX-License-Identifier: AGPL-3.0
 
-pragma solidity ^0.8.19;
+pragma solidity =0.7.6;
 
 interface IERC721 {
     function transferFrom(address, address, uint) external;
