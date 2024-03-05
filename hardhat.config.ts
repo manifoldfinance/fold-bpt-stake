@@ -25,28 +25,6 @@ task("accounts", "Prints the list of accounts", async (args, { ethers }) => {
 })
 
 const config: HardhatUserConfig = {
-    solidity: [
-        {
-            version: "0.8.18",
-            settings: {
-                optimizer: {
-                    enabled: true,
-                    runs: 200,
-                },
-            },
-        },
-        {
-            version: "0.7.6",
-            settings: {
-                viaIR: true,
-                optimizer: {
-                    enabled: true,
-                    runs: 1_000_000,
-                },
-            },
-        },
-        // Add more compiler versions if needed
-    ],
     abiExporter: {
         path: "./abis",
         runOnCompile: true,
@@ -213,16 +191,28 @@ const config: HardhatUserConfig = {
     preprocess: {
         eachLine: removeConsoleLog(bre => bre.network.name !== "hardhat" && bre.network.name !== "localhost"),
     },
-    solidity: {
-        version: "0.8.18",
-        settings: {
-            optimizer: {
-                enabled: true,
-                runs: 200,
+    solidity: [
+        {
+            version: "0.8.18",
+            settings: {
+                optimizer: {
+                    enabled: true,
+                    runs: 200,
+                },
+                viaIR: true,
             },
-            viaIR: true,
         },
-    },
+        {
+            version: "0.7.6",
+            settings: {
+                viaIR: true,
+                optimizer: {
+                    enabled: true,
+                    runs: 1_000_000,
+                },
+            },
+        },
+    ],
     watcher: {
         compile: {
             tasks: [],
