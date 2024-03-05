@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: MIT
 
 pragma solidity =0.7.6;
+pragma abicoder v2;
 
 import "./Owned.sol";
 import "./interfaces/IWETH.sol";
-import "./interfaces/INonfungiblePositionManager.sol";
+
 import "@solmate/utils/ReentrancyGuard.sol";
+import "@uniswap/v3-periphery/contracts/interfaces/INonfungiblePositionManager.sol";
 
 /**
  * @title StakedUPT
@@ -60,24 +62,6 @@ contract StakedUPT is ReentrancyGuard, Owned {
 
     event Deposit(uint tokenId, address owner);
     event Withdrawal(uint tokenId, address owner, uint rewardPaid);
-
-    /* --- Variable container struct  ---
-    Used to hold, return and assign variables inside a function, in order to avoid the error:
-    "CompilerError: Stack too deep". */
-
-    struct LocalVariables_deposit {
-        address token0;
-        address token1;
-        uint128 liquidity;
-    }
-    struct LocalVariables_withdraw {
-        LocalVariables_deposit d;
-        uint reward;
-        uint totalThisWeek;
-        uint timestamp;
-        uint week_iterator;
-        uint current_week;
-    }
 
     /**
      * @dev Update the weekly reward. Amount in WETH.
@@ -137,16 +121,34 @@ contract StakedUPT is ReentrancyGuard, Owned {
         (, , token0, token1, , , , liquidity, , , , ) = nonfungiblePositionManager.positions(tokenId);
     }
 
-    function _rollOverWeek() internal returns (uint current_week) {
+    function _rollOverWETH() internal returns (uint current_week) {
         current_week = (block.timestamp - deployed) / 1 weeks;
-        if (totalsWETH[current_week] == 0) {
+        // if the vault was emptied then we don't need to roll over past liquidity
+        if (totalsWETH[current_week].liquidity == 0 && totalLiquidityWETH > 0) {
             // we have just entered a new week
             uint week = current_week;
             // iterate backwards to find the nearest week with an existing total
             while (week > 0) {
                 week -= 1;
-                if (totalsWETH[week] > 0) {
-                    totalsWETH[current_week] = totalsWETH[week];
+                if (totalsWETH[week].liquidity > 0) {
+                    totalsWETH[current_week].liquidity = totalsWETH[week].liquidity;
+                    break;
+                }
+            }
+        }
+    }
+
+    function _rollOverUSDC() internal returns (uint current_week) {
+        current_week = (block.timestamp - deployed) / 1 weeks;
+        // if the vault was emptied then we don't need to roll over past liquidity
+        if (totalsUSDC[current_week].liquidity == 0 && totalLiquidityUSDC > 0) {
+            // we have just entered a new week
+            uint week = current_week;
+            // iterate backwards to find the nearest week with an existing total
+            while (week > 0) {
+                week -= 1;
+                if (totalsUSDC[week].liquidity > 0) {
+                    totalsUSDC[current_week].liquidity = totalsUSDC[week].liquidity;
                     break;
                 }
             }
@@ -156,50 +158,51 @@ contract StakedUPT is ReentrancyGuard, Owned {
     /**
      * @dev Withdraw UniV3 LP deposit from vault (changing the owner back to original)
      */
-    function withdrawToken(uint256 tokenId) external returns (LocalVariables_withdraw memory LV) {
-        LV.timestamp = depositTimestamps[msg.sender][tokenId]; // verify that a deposit exists
-        require(LV.timestamp > 0, "UniStaker::withdraw: no owner exists for this tokenId");
+    function withdrawToken(uint256 tokenId) external nonReentrant {
+        uint timestamp = depositTimestamps[msg.sender][tokenId]; // verify that a deposit exists
+        require(timestamp > 0, "UniStaker::withdraw: no owner exists for this tokenId");
         require( // how long this deposit has been in the vault
-            (block.timestamp - LV.timestamp) > minLockDuration,
+            (block.timestamp - timestamp) > minLockDuration,
             "UniStaker::withdraw: minimum duration for the deposit has not elapsed yet"
         );
-        LV.current_week = _rollOverWeek();
-        LV.week_iterator = (LV.timestamp - deployed) / 1 weeks; // staker's first week
+        uint week_iterator = (timestamp - deployed) / 1 weeks; // staker's first week
         // transfer ownership back to the original LP token owner
         nonfungiblePositionManager.transferFrom(address(this), msg.sender, tokenId);
+        (address token0, , uint128 liquidity) = _getPositionInfo(tokenId);
 
-        (LV.d.token0, , , LV.d.liquidity) = _getPositionInfo(tokenId);
-
-        if (LV.d.token0 == WETH) {
-            while (LV.week_iterator <= LV.current_week) {
-                LV.totalThisWeek = totalsWETH[LV.week_iterator];
-                if (LV.totalThisWeek > 0) {
+        uint reward;
+        if (token0 == WETH) {
+            uint current_week = _rollOverWETH();
+            while (week_iterator <= current_week) {
+                uint totalThisWeek = totalsWETH[week_iterator];
+                if (totalThisWeek > 0) {
                     // need to check lest div by 0
                     // staker's share of rewards for given week
-                    LV.reward += (weeklyReward * LV.d.liquidity) / LV.totalThisWeek;
+                    reward += (weeklyReward * liquidity) / totalThisWeek;
                 }
-                LV.week_iterator += 1;
+                week_iterator += 1;
             }
-            totalsWETH[LV.current_week] -= LV.d.liquidity;
-            totalLiquidityWETH -= LV.d.liquidity;
-        } else if (LV.d.token0 == USDC) {
-            while (LV.week_iterator <= LV.current_week) {
-                LV.totalThisWeek = totalsUSDC[LV.week_iterator];
-                if (LV.totalThisWeek > 0) {
+            totalLiquidityWETH -= liquidity;
+            totalsWETH[current_week] -= liquidity;
+        } else if (token0 == USDC) {
+            uint current_week = _rollOverUSDC();
+            while (week_iterator <= current_week) {
+                uint totalThisWeek = totalsUSDC[week_iterator];
+                if (totalThisWeek > 0) {
                     // need to check lest div by 0
                     // staker's share of rewards for given week
-                    LV.reward += (weeklyReward * LV.d.liquidity) / LV.totalThisWeek;
+                    reward += (weeklyReward * liquidity) / totalThisWeek;
                 }
-                LV.week_iterator += 1;
+                week_iterator += 1;
             }
-            totalsUSDC[LV.current_week] -= LV.d.liquidity;
-            totalLiquidityUSDC -= LV.d.liquidity;
+            totalLiquidityUSDC -= liquidity;
+            totalsUSDC[current_week] -= liquidity;
         }
-        weth.transfer(msg.sender, LV.reward);
+        weth.transfer(msg.sender, reward);
 
         delete depositTimestamps[msg.sender][tokenId];
 
-        emit Withdrawal(tokenId, msg.sender, LV.reward);
+        emit Withdrawal(tokenId, msg.sender, reward);
     }
 
     /**
@@ -210,27 +213,23 @@ contract StakedUPT is ReentrancyGuard, Owned {
      * Stakers underwrite captive insurance for
      * the relay (against outages in mevAuction)
      */
-
-    function deposit(uint tokenId) external returns (LocalVariables_deposit memory LV) {
+    function deposit(uint tokenId) external nonReentrant {
         // transfer ownership of LP share to this contract
         nonfungiblePositionManager.transferFrom(msg.sender, address(this), tokenId);
+        (address token0, address token1, uint128 liquidity) = _getPositionInfo(tokenId);
 
-        (LV.d.token0, LV.d.token1, LV.d.liquidity) = _getPositionInfo(tokenId);
-
-        require(LV.d.token1 == FOLD, "UniStaker::deposit: improper token id");
-
+        require(token1 == FOLD, "UniStaker::deposit: improper token id");
         // usually this means that the owner of the position already closed it
-        require(LV.d.liquidity > 0, "UniStaker::deposit: cannot deposit empty amount");
+        require(liquidity > 0, "UniStaker::deposit: cannot deposit empty amount");
 
-        LV.current_week = _rollOverWeek();
-        if (LV.d.token0 == WETH) {
-            totalLiquidityWETH += LV.d.liquidity;
+        if (token0 == WETH) {
+            totalLiquidityWETH += liquidity;
             require(totalLiquidityWETH <= maxTotalWETH, "UniStaker::deposit: totalLiquidity exceed max");
-            totalsWETH[LV.current_week] += LV.d.liquidity;
-        } else if (LV.d.token0 == USDC) {
-            totalLiquidityUSDC += LV.d.liquidity;
+            totalsWETH[_rollOverWETH()] += liquidity;
+        } else if (token0 == USDC) {
+            totalLiquidityUSDC += liquidity;
             require(totalLiquidityUSDC <= maxTotalUSDC, "UniStaker::deposit: totalLiquidity exceed max");
-            totalsUSDC[LV.current_week] += LV.d.liquidity;
+            totalsUSDC[_rollOverUSDC()] += liquidity;
         } else {
             require(false, "UniStaker::deposit: improper token id");
         }
