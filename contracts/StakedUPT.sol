@@ -1,13 +1,12 @@
 // SPDX-License-Identifier: MIT
 
-pragma solidity =0.7.6;
-pragma abicoder v2;
+pragma solidity ^0.8.0;
 
 import "./Owned.sol";
 import "./interfaces/IWETH.sol";
 
 import "@solmate/utils/ReentrancyGuard.sol";
-import "@uniswap/v3-periphery/contracts/interfaces/INonfungiblePositionManager.sol";
+import "./interfaces/INonfungiblePositionManager.sol";
 
 /**
  * @title StakedUPT
@@ -117,21 +116,21 @@ contract StakedUPT is ReentrancyGuard, Owned {
         nonfungiblePositionManager = INonfungiblePositionManager(NFPM); // UniV3
     }
 
-    function _getPositionInfo(uint tokenId) internal returns (address token0, address token1, uint128 liquidity) {
+    function _getPositionInfo(uint tokenId) internal view returns (address token0, address token1, uint128 liquidity) {
         (, , token0, token1, , , , liquidity, , , , ) = nonfungiblePositionManager.positions(tokenId);
     }
 
     function _rollOverWETH() internal returns (uint current_week) {
         current_week = (block.timestamp - deployed) / 1 weeks;
         // if the vault was emptied then we don't need to roll over past liquidity
-        if (totalsWETH[current_week].liquidity == 0 && totalLiquidityWETH > 0) {
+        if (totalsWETH[current_week] == 0 && totalLiquidityWETH > 0) {
             // we have just entered a new week
             uint week = current_week;
             // iterate backwards to find the nearest week with an existing total
             while (week > 0) {
                 week -= 1;
-                if (totalsWETH[week].liquidity > 0) {
-                    totalsWETH[current_week].liquidity = totalsWETH[week].liquidity;
+                if (totalsWETH[week] > 0) {
+                    totalsWETH[current_week] = totalsWETH[week];
                     break;
                 }
             }
@@ -141,14 +140,14 @@ contract StakedUPT is ReentrancyGuard, Owned {
     function _rollOverUSDC() internal returns (uint current_week) {
         current_week = (block.timestamp - deployed) / 1 weeks;
         // if the vault was emptied then we don't need to roll over past liquidity
-        if (totalsUSDC[current_week].liquidity == 0 && totalLiquidityUSDC > 0) {
+        if (totalsUSDC[current_week] == 0 && totalLiquidityUSDC > 0) {
             // we have just entered a new week
             uint week = current_week;
             // iterate backwards to find the nearest week with an existing total
             while (week > 0) {
                 week -= 1;
-                if (totalsUSDC[week].liquidity > 0) {
-                    totalsUSDC[current_week].liquidity = totalsUSDC[week].liquidity;
+                if (totalsUSDC[week] > 0) {
+                    totalsUSDC[current_week] = totalsUSDC[week];
                     break;
                 }
             }
