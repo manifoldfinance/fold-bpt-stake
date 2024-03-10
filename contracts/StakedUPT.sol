@@ -124,16 +124,7 @@ contract StakedUPT is ReentrancyGuard, Owned {
         current_week = (block.timestamp - deployed) / 1 weeks;
         // if the vault was emptied then we don't need to roll over past liquidity
         if (totalsWETH[current_week] == 0 && totalLiquidityWETH > 0) {
-            // we have just entered a new week
-            uint week = current_week;
-            // iterate backwards to find the nearest week with an existing total
-            while (week > 0) {
-                week -= 1;
-                if (totalsWETH[week] > 0) {
-                    totalsWETH[current_week] = totalsWETH[week];
-                    break;
-                }
-            }
+            totalsWETH[current_week] = totalLiquidityWETH;
         }
     }
 
@@ -141,16 +132,7 @@ contract StakedUPT is ReentrancyGuard, Owned {
         current_week = (block.timestamp - deployed) / 1 weeks;
         // if the vault was emptied then we don't need to roll over past liquidity
         if (totalsUSDC[current_week] == 0 && totalLiquidityUSDC > 0) {
-            // we have just entered a new week
-            uint week = current_week;
-            // iterate backwards to find the nearest week with an existing total
-            while (week > 0) {
-                week -= 1;
-                if (totalsUSDC[week] > 0) {
-                    totalsUSDC[current_week] = totalsUSDC[week];
-                    break;
-                }
-            }
+            totalsUSDC[current_week] = totalLiquidityUSDC;
         }
     }
 
@@ -165,8 +147,6 @@ contract StakedUPT is ReentrancyGuard, Owned {
             "UniStaker::withdraw: minimum duration for the deposit has not elapsed yet"
         );
         uint week_iterator = (timestamp - deployed) / 1 weeks; // staker's first week
-        // transfer ownership back to the original LP token owner
-        nonfungiblePositionManager.transferFrom(address(this), msg.sender, tokenId);
         (address token0, , uint128 liquidity) = _getPositionInfo(tokenId);
 
         uint reward;
@@ -182,7 +162,6 @@ contract StakedUPT is ReentrancyGuard, Owned {
                 week_iterator += 1;
             }
             totalLiquidityWETH -= liquidity;
-            totalsWETH[current_week] -= liquidity;
         } else if (token0 == USDC) {
             uint current_week = _rollOverUSDC();
             while (week_iterator <= current_week) {
@@ -195,11 +174,11 @@ contract StakedUPT is ReentrancyGuard, Owned {
                 week_iterator += 1;
             }
             totalLiquidityUSDC -= liquidity;
-            totalsUSDC[current_week] -= liquidity;
         }
-        weth.transfer(msg.sender, reward);
-
+        require(weth.transfer(msg.sender, reward), "UniStaker::withdraw: transfer failed");
         delete depositTimestamps[msg.sender][tokenId];
+        // transfer ownership back to the original LP token owner
+        nonfungiblePositionManager.transferFrom(address(this), msg.sender, tokenId);
 
         emit Withdrawal(tokenId, msg.sender, reward);
     }
@@ -213,8 +192,6 @@ contract StakedUPT is ReentrancyGuard, Owned {
      * the relay (against outages in mevAuction)
      */
     function deposit(uint tokenId) external nonReentrant {
-        // transfer ownership of LP share to this contract
-        nonfungiblePositionManager.transferFrom(msg.sender, address(this), tokenId);
         (address token0, address token1, uint128 liquidity) = _getPositionInfo(tokenId);
 
         require(token1 == FOLD, "UniStaker::deposit: improper token id");
@@ -233,6 +210,8 @@ contract StakedUPT is ReentrancyGuard, Owned {
             require(false, "UniStaker::deposit: improper token id");
         }
         depositTimestamps[msg.sender][tokenId] = block.timestamp;
+        // transfer ownership of LP share to this contract
+        nonfungiblePositionManager.transferFrom(msg.sender, address(this), tokenId);
 
         emit Deposit(tokenId, msg.sender);
     }

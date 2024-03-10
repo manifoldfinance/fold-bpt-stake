@@ -40,5 +40,5 @@ interface INonfungiblePositionManager {
             uint128 tokensOwed1
         );
 
-    function transferFrom(address from, address to, uint256 id) external;
+    function transferFrom(address from, address to, uint256 tokenId) external;
 }
