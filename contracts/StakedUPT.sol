@@ -181,7 +181,7 @@ contract StakedUPT is ReentrancyGuard, Owned {
                 if (totalThisWeek > 0) {
                     // need to check lest div by 0
                     // staker's share of rewards for given week
-                    totalReward += (weeklyReward * liquidity) / totalThisWeek;
+                    totalReward += (reward * liquidity) / totalThisWeek;
                 }
                 week_iterator += 1;
                 reward = weeklyReward;
