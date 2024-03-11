@@ -54,14 +54,25 @@ contract StakedCPT is StakedPT {
     }
 
     /**
+     * @dev Query amount out of LP token for amounts in.
+     * @param amounts Array of amounts of tokens to be provided.
+     * @return lptokenAmount Amount of lp to expect.
+     */
+    function cptOut(uint256[2] calldata amounts) external view returns (uint256 lptokenAmount) {
+        lptokenAmount = pool.calc_token_amount(amounts) - 1;
+    }
+
+    /**
      * @dev Zap into the Curve pool by providing tokens and receiving staked LP tokens in return.
      * @param amounts Array of amounts of tokens to be provided.
      * @param receiver Address to receive the staked LP tokens.
+     * @param lptokenAmount Amount of lp to expect.
      * @return shares Number of shares representing the staked LP tokens.
      */
     function zapCPT(
         uint256[2] calldata amounts,
-        address receiver
+        address receiver,
+        uint256 lptokenAmount
     ) external payable nonReentrant returns (uint256 shares) {
         address[2] memory tokens;
         tokens[0] = pool.coins(0);
@@ -78,9 +89,7 @@ contract StakedCPT is StakedPT {
             IERC20(tokens[i]).approve(address(pool), amounts[i]);
         }
 
-        uint256 lptokenAmount = pool.calc_token_amount(amounts);
-
-        lptokenAmount = pool.add_liquidity(amounts, lptokenAmount - 1, false, address(this));
+        lptokenAmount = pool.add_liquidity(amounts, lptokenAmount, false, address(this));
 
         // Stake CPT to receive cvxtoken
         IERC20(lptoken).approve(address(booster), lptokenAmount);
@@ -198,8 +207,8 @@ contract StakedCPT is StakedPT {
 
         // step 2: zap tokens for LP
         {
-            uint256 lptokenAmount = pool.calc_token_amount(amounts);
-            lptokenAmount = pool.add_liquidity(amounts, lptokenAmount - 1, false, address(this));
+            uint256 lptokenAmount = ((pool.calc_token_amount(amounts) - 1) * 99) / 100;
+            lptokenAmount = pool.add_liquidity(amounts, lptokenAmount, false, address(this));
             // step 3: Stake CPT to receive cvxtoken
             IERC20(lptoken).approve(address(booster), lptokenAmount);
             booster.deposit(pid, lptokenAmount, false);

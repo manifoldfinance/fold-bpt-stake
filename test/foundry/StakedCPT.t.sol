@@ -55,7 +55,11 @@ contract StakedCPTTest is Test {
         amounts[1] = amount;
         writeTokenBalance(address(this), frxEth, 0.0001 ether);
         IERC20(frxEth).approve(address(stakedCPT), amount);
-        stakedCPT.zapCPT(amounts, address(this));
+        stakedCPT.zapCPT(
+            amounts,
+            address(this),
+            (stakedCPT.cptOut(amounts) * 99) / 100
+        );
         assertGt(stakedCPT.balanceOf(address(this)), 0);
     }
 
@@ -69,7 +73,11 @@ contract StakedCPTTest is Test {
         amounts[0] = 0;
         amounts[1] = amount;
 
-        uint256 stakedAuraCPT = stakedCPT.zapCPT(amounts, address(this));
+        uint256 stakedAuraCPT = stakedCPT.zapCPT(
+            amounts,
+            address(this),
+            (stakedCPT.cptOut(amounts) * 99) / 100
+        );
         vm.warp(block.timestamp + 60 days);
         stakedCPT.approve(address(stakedCPT), stakedAuraCPT);
         uint256[2] memory minAmountsOut;
