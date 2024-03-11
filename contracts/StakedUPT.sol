@@ -146,41 +146,59 @@ contract StakedUPT is ReentrancyGuard, Owned {
             (block.timestamp - timestamp) > minLockDuration,
             "UniStaker::withdraw: minimum duration for the deposit has not elapsed yet"
         );
-        uint week_iterator = (timestamp - deployed) / 1 weeks; // staker's first week
         (address token0, , uint128 liquidity) = _getPositionInfo(tokenId);
+        uint week_iterator = (timestamp - deployed) / 1 weeks;
 
-        uint reward;
+        // could've deposited right before the end of the week, so need a bit of granularity
+        // otherwise an unfairly large portion of rewards may be obtained by staker
+        uint so_far = (timestamp - deployed) / 1 hours;
+        uint delta = so_far - (week_iterator * 168);
+
+        uint reward = (delta * weeklyReward) / 168; // the first reward may be a fraction of a whole week's worth
+        uint totalReward = 0;
         if (token0 == WETH) {
             uint current_week = _rollOverWETH();
-            while (week_iterator <= current_week) {
+            while (week_iterator < current_week) {
                 uint totalThisWeek = totalsWETH[week_iterator];
                 if (totalThisWeek > 0) {
                     // need to check lest div by 0
                     // staker's share of rewards for given week
-                    reward += (weeklyReward * liquidity) / totalThisWeek;
+                    totalReward += (reward * liquidity) / totalThisWeek;
                 }
                 week_iterator += 1;
+                reward = weeklyReward;
             }
+            so_far = (block.timestamp - deployed) / 1 hours;
+            delta = so_far - (current_week * 168);
+            // the last reward will be a fraction of a whole week's worth
+            reward = (delta * weeklyReward) / 168; // because we're in the middle of a current week
+            totalReward += (reward * liquidity) / totalLiquidityWETH;
             totalLiquidityWETH -= liquidity;
         } else if (token0 == USDC) {
             uint current_week = _rollOverUSDC();
-            while (week_iterator <= current_week) {
+            while (week_iterator < current_week) {
                 uint totalThisWeek = totalsUSDC[week_iterator];
                 if (totalThisWeek > 0) {
                     // need to check lest div by 0
                     // staker's share of rewards for given week
-                    reward += (weeklyReward * liquidity) / totalThisWeek;
+                    totalReward += (weeklyReward * liquidity) / totalThisWeek;
                 }
                 week_iterator += 1;
+                reward = weeklyReward;
             }
+            so_far = (block.timestamp - deployed) / 1 hours;
+            delta = so_far - (current_week * 168);
+            // the last reward will be a fraction of a whole week's worth
+            reward = (delta * weeklyReward) / 168; // because we're in the middle of a current week
+            totalReward += (reward * liquidity) / totalLiquidityUSDC;
             totalLiquidityUSDC -= liquidity;
         }
-        require(weth.transfer(msg.sender, reward), "UniStaker::withdraw: transfer failed");
+        require(weth.transfer(msg.sender, totalReward), "UniStaker::withdraw: transfer failed");
         delete depositTimestamps[msg.sender][tokenId];
         // transfer ownership back to the original LP token owner
         nonfungiblePositionManager.transferFrom(address(this), msg.sender, tokenId);
 
-        emit Withdrawal(tokenId, msg.sender, reward);
+        emit Withdrawal(tokenId, msg.sender, totalReward);
     }
 
     /**
@@ -199,13 +217,13 @@ contract StakedUPT is ReentrancyGuard, Owned {
         require(liquidity > 0, "UniStaker::deposit: cannot deposit empty amount");
 
         if (token0 == WETH) {
+            totalsWETH[_rollOverWETH()] += liquidity;
             totalLiquidityWETH += liquidity;
             require(totalLiquidityWETH <= maxTotalWETH, "UniStaker::deposit: totalLiquidity exceed max");
-            totalsWETH[_rollOverWETH()] += liquidity;
         } else if (token0 == USDC) {
+            totalsUSDC[_rollOverUSDC()] += liquidity;
             totalLiquidityUSDC += liquidity;
             require(totalLiquidityUSDC <= maxTotalUSDC, "UniStaker::deposit: totalLiquidity exceed max");
-            totalsUSDC[_rollOverUSDC()] += liquidity;
         } else {
             require(false, "UniStaker::deposit: improper token id");
         }
