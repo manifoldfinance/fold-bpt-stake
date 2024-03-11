@@ -193,8 +193,8 @@ contract StakedUPT is ReentrancyGuard, Owned {
             totalReward += (reward * liquidity) / totalLiquidityUSDC;
             totalLiquidityUSDC -= liquidity;
         }
-        require(weth.transfer(msg.sender, totalReward), "UniStaker::withdraw: transfer failed");
         delete depositTimestamps[msg.sender][tokenId];
+        require(weth.transfer(msg.sender, totalReward), "UniStaker::withdraw: transfer failed");
         // transfer ownership back to the original LP token owner
         nonfungiblePositionManager.transferFrom(address(this), msg.sender, tokenId);
 

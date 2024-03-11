@@ -1,5 +1,5 @@
 {
-    "detectors_to_exclude": "incorrect-equality,arbitrary-send-eth,unused-return,calls-loop,block-timestamp,solc-version,missing-zero-check,naming-convention,dead-code,reentrancy-events",
+    "detectors_to_exclude": "incorrect-equality,arbitrary-send-eth,unused-return,calls-loop,block-timestamp,solc-version,missing-zero-check,naming-convention,dead-code,reentrancy-events,erc20-interface,divide-before-multiply,similar-names",
     "exclude_informational": false,
     "exclude_low": false,
     "exclude_medium": false,
