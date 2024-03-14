@@ -4,10 +4,9 @@ test = 'test/foundry'
 script = "script"
 out = "out"
 remappings = [
-    "@openzeppelin/=lib/openzeppelin-contracts",
-    "@solmate=lib/solmate/src"
+    "solmate=lib/solmate/src"
 ]
-libs = ['node_modules', 'lib']
+libs = ['lib']
 auto_detect_remappings = true
 libraries = []
 cache = true
@@ -16,7 +15,7 @@ broadcast = "broadcast"
 allow_paths = []
 include_paths = []
 force = false
-evm_version = "paris"
+evm_version = "shanghai"
 gas_reports = ["*"]
 gas_reports_ignore = []
 auto_detect_solc = true
@@ -56,14 +55,6 @@ cbor_metadata = true
 sparse_mode = false
 build_info = false
 
-[[profile.default.fs_permissions]]
-access = "read"
-path = "out"
-
-[profile.default.rpc_storage_caching]
-chains = "all"
-endpoints = "all"
-
 [fmt]
 line_length = 120
 tab_width = 4
@@ -77,27 +68,6 @@ override_spacing = false
 wrap_comments = false
 ignore = []
 contract_new_lines = false
-
-[fuzz]
-runs = 256
-max_test_rejects = 65536
-dictionary_weight = 40
-include_storage = true
-include_push_bytes = true
-max_fuzz_dictionary_addresses = 15728640
-max_fuzz_dictionary_values = 6553600
-
-[invariant]
-runs = 256
-depth = 15
-fail_on_revert = false
-call_override = false
-dictionary_weight = 80
-include_storage = true
-include_push_bytes = true
-max_fuzz_dictionary_addresses = 15728640
-max_fuzz_dictionary_values = 6553600
-shrink_sequence = true
 
 [etherscan]
 mainnet = { key = "${ETHERSCAN_API_KEY}" }

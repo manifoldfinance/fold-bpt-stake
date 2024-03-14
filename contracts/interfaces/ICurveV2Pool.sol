@@ -56,4 +56,23 @@ interface ICurveV2Pool {
     function coins(uint256 arg0) external view returns (address);
 
     function balances(uint256 arg0) external view returns (uint256);
+
+    function exchange(
+        uint256 i,
+        uint256 j,
+        uint256 dx,
+        uint256 min_dy,
+        bool use_eth,
+        address receiver
+    ) external payable returns (uint256 dy);
+
+    function exchange(
+        uint256 i,
+        uint256 j,
+        uint256 dx,
+        uint256 min_dy,
+        bool use_eth
+    ) external payable returns (uint256 dy);
+
+    function get_dy(uint256 i, uint256 j, uint256 dx) external view returns (uint256);
 }

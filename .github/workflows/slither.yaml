@@ -5,6 +5,7 @@ on:
   push:
     paths:
     - 'contracts/**/*.sol'
+    - '.github/workflows/**/*.yaml'
 
 # ensure multiple CI processes are not running analysis on contracts
 concurrency:
@@ -25,10 +26,23 @@ jobs:
         with:
           submodules: recursive
 
+      - uses: actions/cache@v3
+        with:
+          path: |
+            forge-cache
+            out
+          key: ${{ runner.OS }}-contracts-slither-${{ hashFiles('contracts/*.sol', 'contracts/**/*.sol') }}
+
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+
+      - name: Compile
+        run: forge build --build-info
+
       - name: Run Slither
         uses: crytic/slither-action@v0.3.0
         id: slither
         with:
-          fail-on: all
+          ignore-compile: true
           slither-args: --checklist
-          solc-version: "0.8.20"

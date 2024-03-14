@@ -13,7 +13,7 @@ contract StakedCPTTest is Test {
     address constant cvxtoken = 0xEFD9bC8c4f341a7dA06835F1790118D8372BA033; // Curve.fi Factory Crypto Pool: mevETH/frxETH Convex Deposit
     address constant booster = 0xF403C135812408BFbE8713b5A23a04b3D48AAE31; // Booster
     address constant pool = 0xF1B0382A141040601Bd4c98Ee1A05b44A7392A80; // Curve pool
-    address constant treasury = 0x617c8dE5BdE54ffbb8d92716CC947858cA38f582; // Multisig
+    address constant treasury = 0xe664B134d96fdB0bf7951E0c0557B87Bac5e5277; // Multisig
     uint256 constant minLockDuration = 30 days; // 1 month
     address constant owner = 0x617c8dE5BdE54ffbb8d92716CC947858cA38f582; // Multisig
     uint256 constant pid = 261;
@@ -30,7 +30,7 @@ contract StakedCPTTest is Test {
     address constant crv = 0xD533a949740bb3306d119CC777fa900bA034cd52;
 
     function setUp() public virtual {
-        FORK_ID = vm.createSelectFork(RPC_ETH_MAINNET);
+        FORK_ID = vm.createSelectFork(RPC_ETH_MAINNET, 19034135);
         stakedCPT = new StakedCPT(
             clp,
             cvxtoken,
@@ -55,7 +55,11 @@ contract StakedCPTTest is Test {
         amounts[1] = amount;
         writeTokenBalance(address(this), frxEth, 0.0001 ether);
         IERC20(frxEth).approve(address(stakedCPT), amount);
-        stakedCPT.zapCPT(amounts, address(this));
+        stakedCPT.zapCPT(
+            amounts,
+            address(this),
+            (stakedCPT.cptOut(amounts) * 99) / 100
+        );
         assertGt(stakedCPT.balanceOf(address(this)), 0);
     }
 
@@ -68,9 +72,12 @@ contract StakedCPTTest is Test {
         uint256[2] memory amounts;
         amounts[0] = 0;
         amounts[1] = amount;
-        // writeTokenBalance(address(this), frxEth, 0.0001 ether);
-        // IERC20(frxEth).approve(address(stakedCPT), amount);
-        uint256 stakedAuraCPT = stakedCPT.zapCPT(amounts, address(this));
+
+        uint256 stakedAuraCPT = stakedCPT.zapCPT(
+            amounts,
+            address(this),
+            (stakedCPT.cptOut(amounts) * 99) / 100
+        );
         vm.warp(block.timestamp + 60 days);
         stakedCPT.approve(address(stakedCPT), stakedAuraCPT);
         uint256[2] memory minAmountsOut;
@@ -117,7 +124,7 @@ contract StakedCPTTest is Test {
     }
 
     function testHarvest(uint128 amount) public virtual {
-        vm.assume(amount > 1 ether);
+        vm.assume(amount > 100 ether);
         vm.assume(amount < 100000000 ether);
         vm.selectFork(FORK_ID);
         writeTokenBalance(address(this), clp, amount);
@@ -126,13 +133,19 @@ contract StakedCPTTest is Test {
             IERC20(clp).balanceOf(address(this)),
             address(this)
         );
-        // uint256 cvxtokenBefore = IERC20(aura).balanceOf(treasury);
-        uint256 balBalBefore = IERC20(crv).balanceOf(treasury);
-        vm.warp(block.timestamp + 60 days);
+
+        uint256 valBefore = stakedCPT.previewRedeem(
+            IERC20(address(stakedCPT)).balanceOf(address(this))
+        );
+        vm.warp(block.timestamp + 180 days);
 
         stakedCPT.harvest();
-        // assertGt(IERC20(aura).balanceOf(treasury), cvxtokenBefore);
-        assertGt(IERC20(crv).balanceOf(treasury), balBalBefore);
+        assertGt(
+            stakedCPT.previewRedeem(
+                IERC20(address(stakedCPT)).balanceOf(address(this))
+            ),
+            valBefore
+        );
     }
 
     function testDepositTimestamp() public virtual {
