@@ -30,7 +30,7 @@ contract StakedCPTTest is Test {
     address constant crv = 0xD533a949740bb3306d119CC777fa900bA034cd52;
 
     function setUp() public virtual {
-        FORK_ID = vm.createSelectFork(RPC_ETH_MAINNET);
+        FORK_ID = vm.createSelectFork(RPC_ETH_MAINNET, 19529221);
         stakedCPT = new StakedCPT(
             clp,
             cvxtoken,

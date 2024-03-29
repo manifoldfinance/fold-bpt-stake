@@ -34,7 +34,7 @@ contract StakedBPTTest is Test {
     address constant bal = 0xba100000625a3754423978a60c9317c58a424e3D;
 
     function setUp() public virtual {
-        FORK_ID = vm.createSelectFork(RPC_ETH_MAINNET);
+        FORK_ID = vm.createSelectFork(RPC_ETH_MAINNET, 19529221);
         stakedBPT = new StakedBPT(
             bpt,
             auraBal,
@@ -160,7 +160,7 @@ contract StakedBPTTest is Test {
         );
         // uint256 auraBalBefore = IERC20(aura).balanceOf(treasury);
         uint256 balBalBefore = IERC20(bal).balanceOf(treasury);
-        vm.warp(block.timestamp + 60 days);
+        vm.warp(block.timestamp + 180 days);
 
         stakedBPT.harvest();
         // assertGt(IERC20(aura).balanceOf(treasury), auraBalBefore);
