@@ -5,7 +5,7 @@ pragma solidity ^0.8.0;
 import "./Owned.sol";
 import "./interfaces/IWETH.sol";
 
-import "@solmate/utils/ReentrancyGuard.sol";
+import "solmate/utils/ReentrancyGuard.sol";
 import "./interfaces/INonfungiblePositionManager.sol";
 
 /**
