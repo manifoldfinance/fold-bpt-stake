@@ -4,14 +4,15 @@ pragma solidity ^0.8.18;
 
 // Import necessary contracts and libraries
 import "./Owned.sol";
-import "@solmate/mixins/ERC4626.sol";
-import "@solmate/utils/ReentrancyGuard.sol";
-import "@solmate/utils/SafeTransferLib.sol";
+import "solmate/mixins/ERC4626.sol";
+import "solmate/utils/ReentrancyGuard.sol";
+import "solmate/utils/SafeTransferLib.sol";
 import "./interfaces/IBooster.sol";
 import "./interfaces/IRewards.sol";
 import "./interfaces/IERC20.sol";
 import "./interfaces/IVirtualRewards.sol";
 import "./interfaces/IStash.sol";
+import "./interfaces/IMevEth.sol";
 import "./interfaces/IWETH.sol";
 
 /**
@@ -38,6 +39,9 @@ abstract contract StakedPT is ERC4626, ReentrancyGuard, Owned {
     /// @notice Pool ID in the rewards pool contract
     uint256 public immutable pid;
 
+    IMevEth internal constant mevEth = IMevEth(0x24Ae2dA0f361AA4BE46b48EB19C91e02c5e4f27E);
+    uint256 internal constant MIN_ZAP = 0.01 ether;
+
     // Globals
     address public treasury;
     uint256 public minLockDuration;
@@ -46,6 +50,7 @@ abstract contract StakedPT is ERC4626, ReentrancyGuard, Owned {
     // Events
     event UpdateTreasury(address indexed treasury);
     event UpdateMinLockDuration(uint256 duration);
+    event CompoundRewards(uint256 assets);
 
     // Custom errors
     error ZeroShares();
@@ -126,6 +131,22 @@ abstract contract StakedPT is ERC4626, ReentrancyGuard, Owned {
         emit UpdateMinLockDuration(_minLockDuration);
     }
 
+    function _deposit(address receiver) internal returns (uint256 shares) {
+        uint256 assets = IERC20(cvxtoken).balanceOf(address(this));
+
+        // Check for rounding error since we round down in previewDeposit.
+        shares = previewDeposit(assets);
+        if (shares == 0) revert ZeroShares();
+
+        _updateDepositTimestamp(receiver, shares);
+
+        _mint(receiver, shares);
+
+        emit Deposit(msg.sender, receiver, assets, shares);
+
+        afterDeposit(assets, shares);
+    }
+
     /**
      * @dev Deposit LP tokens to stake and receive AUR / CVX rewards.
      * @param lptokenAmount Amount of LP tokens to deposit.
@@ -139,18 +160,8 @@ abstract contract StakedPT is ERC4626, ReentrancyGuard, Owned {
         IERC20(lptoken).approve(address(booster), lptokenAmount);
         booster.deposit(pid, lptokenAmount, false);
 
-        uint256 assets = IERC20(cvxtoken).balanceOf(address(this));
-
-        // Check for rounding error since we round down in previewDeposit.
-        shares = previewDeposit(assets);
-        if (shares == 0) revert ZeroShares();
-        _updateDepositTimestamp(receiver, shares);
-
-        _mint(receiver, shares);
-
-        emit Deposit(msg.sender, receiver, assets, shares);
-
-        afterDeposit(assets, shares);
+        // stake cvxtoken
+        shares = _deposit(receiver);
     }
 
     function withdrawLP(
@@ -206,40 +217,43 @@ abstract contract StakedPT is ERC4626, ReentrancyGuard, Owned {
         crvRewards.getReward();
         address token = crvRewards.rewardToken();
         uint256 amount = IERC20(token).balanceOf(address(this));
+        uint256 amountOut;
         if (amount > 0) {
-            ERC20(token).safeTransfer(treasury, amount);
+            // swap for weth
+            amountOut = swapReward(token, amount);
         }
-        _claimExtras();
+        amountOut += _claimExtras();
+        amountOut = _sendProtocolFee(amountOut);
+        _zapSwappedRewards(amountOut);
     }
 
-    function _claimExtras() internal virtual {
+    function _claimExtras() internal virtual returns (uint256 amountOut) {
         uint256 len = crvRewards.extraRewardsLength();
         if (len > 0) {
-            address[] memory rewardTokens = new address[](len);
             for (uint256 i; i < len; i = _inc(i)) {
                 address virtualRewards = crvRewards.extraRewards(i);
-                rewardTokens[i] = _getStashToken(virtualRewards);
+                address token = _getStashToken(virtualRewards);
+                uint256 amount = IERC20(token).balanceOf(address(this));
+                if (amount > 0) {
+                    amountOut += swapReward(token, amount);
+                }
             }
-            transferTokens(rewardTokens);
         }
+    }
+
+    function swapReward(address token, uint256 amountIn) internal virtual returns (uint256 amountOut) {}
+
+    function _zapSwappedRewards(uint256 amount) internal virtual {}
+
+    function _sendProtocolFee(uint256 wethBal) internal returns (uint256 amountRemaining) {
+        // send 10% to treasury
+        ERC20(address(weth)).safeTransfer(treasury, wethBal / 10);
+        amountRemaining = (wethBal * 90) / 100;
     }
 
     function _getStashToken(address virtualRewards) internal virtual returns (address stashToken) {
         address stash = IVirtualRewards(virtualRewards).rewardToken();
         stashToken = IStash(stash).baseToken();
-    }
-
-    /**
-     * @dev Internal function to transfer reward tokens to the treasury.
-     * @param tokens Array of reward tokens to be transferred.
-     */
-    function transferTokens(address[] memory tokens) internal nonReentrant {
-        for (uint256 i; i < tokens.length; i = _inc(i)) {
-            uint256 amount = IERC20(tokens[i]).balanceOf(address(this));
-            if (amount > 0) {
-                ERC20(tokens[i]).safeTransfer(treasury, amount);
-            }
-        }
     }
 
     function _inc(uint256 i) internal pure returns (uint256 j) {

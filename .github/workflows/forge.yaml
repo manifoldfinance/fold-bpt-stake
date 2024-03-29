@@ -13,15 +13,15 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v3
-        with:
-          submodules: recursive
+    - uses: actions/checkout@v3
+      with:
+        submodules: recursive
+    
+    - name: Install Foundry
+      uses: foundry-rs/foundry-toolchain@v1
 
-      - name: Install Foundry
-        uses: foundry-rs/foundry-toolchain@v1
-        with:
-          version: nightly
-
-      - name: Run tests
-        run: forge test -vvv
+    - name: Build
+      run: forge build --sizes
+      
+    - name: Run tests
+      run: forge test -vvv

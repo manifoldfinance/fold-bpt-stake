@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.10;
 
-interface IWETH {
-    function deposit() external payable;
+import "./IERC20.sol";
 
-    function transfer(address to, uint value) external returns (bool);
+interface IWETH is IERC20 {
+    function deposit() external payable;
 
     function withdraw(uint) external;
 }
