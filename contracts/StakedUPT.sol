@@ -53,6 +53,8 @@ contract StakedUPT is ReentrancyGuard, Owned {
     // Uniswap's NonFungiblePositionManager (one for all new pools)
     address constant NFPM = 0xC36442b4a4522E871399CD717aBDD847Ab11FE88;
 
+    uint256 constant HOURS_PER_WEEK = 168;
+
     event SetWeeklyReward(uint256 reward);
     event SetMinLockDuration(uint256 duration);
 
@@ -61,6 +63,8 @@ contract StakedUPT is ReentrancyGuard, Owned {
 
     event Deposit(uint tokenId, address owner);
     event Withdrawal(uint tokenId, address owner, uint rewardPaid);
+
+    error UnsupportedToken();
 
     /**
      * @dev Update the weekly reward. Amount in WETH.
@@ -110,7 +114,7 @@ contract StakedUPT is ReentrancyGuard, Owned {
         maxTotalWETH = type(uint256).max;
         maxTotalUSDC = type(uint256).max;
 
-        weeklyReward = 1_000_000_000_000; // 0.000001 WETH
+        weeklyReward = 0.000001 ether; // 0.000001 WETH
         weth = IWETH(WETH);
 
         nonfungiblePositionManager = INonfungiblePositionManager(NFPM); // UniV3
@@ -131,7 +135,7 @@ contract StakedUPT is ReentrancyGuard, Owned {
     function _rollOverUSDC() internal returns (uint current_week) {
         current_week = (block.timestamp - deployed) / 1 weeks;
         // if the vault was emptied then we don't need to roll over past liquidity
-        if (totalsUSDC[current_week] == 0 && totalLiquidityUSDC > 0) {
+        if (totalLiquidityUSDC > 0 && totalsUSDC[current_week] == 0) {
             totalsUSDC[current_week] = totalLiquidityUSDC;
         }
     }
@@ -152,9 +156,9 @@ contract StakedUPT is ReentrancyGuard, Owned {
         // could've deposited right before the end of the week, so need a bit of granularity
         // otherwise an unfairly large portion of rewards may be obtained by staker
         uint so_far = (timestamp - deployed) / 1 hours;
-        uint delta = so_far - (week_iterator * 168);
+        uint delta = so_far - (week_iterator * HOURS_PER_WEEK);
 
-        uint reward = (delta * weeklyReward) / 168; // the first reward may be a fraction of a whole week's worth
+        uint reward = (delta * weeklyReward) / HOURS_PER_WEEK; // the first reward may be a fraction of a whole week's worth
         uint totalReward = 0;
         if (token0 == WETH) {
             uint current_week = _rollOverWETH();
@@ -169,9 +173,9 @@ contract StakedUPT is ReentrancyGuard, Owned {
                 reward = weeklyReward;
             }
             so_far = (block.timestamp - deployed) / 1 hours;
-            delta = so_far - (current_week * 168);
+            delta = so_far - (current_week * HOURS_PER_WEEK);
             // the last reward will be a fraction of a whole week's worth
-            reward = (delta * weeklyReward) / 168; // because we're in the middle of a current week
+            reward = (delta * weeklyReward) / HOURS_PER_WEEK; // because we're in the middle of a current week
             totalReward += (reward * liquidity) / totalLiquidityWETH;
             totalLiquidityWETH -= liquidity;
         } else if (token0 == USDC) {
@@ -187,14 +191,14 @@ contract StakedUPT is ReentrancyGuard, Owned {
                 reward = weeklyReward;
             }
             so_far = (block.timestamp - deployed) / 1 hours;
-            delta = so_far - (current_week * 168);
+            delta = so_far - (current_week * HOURS_PER_WEEK);
             // the last reward will be a fraction of a whole week's worth
-            reward = (delta * weeklyReward) / 168; // because we're in the middle of a current week
+            reward = (delta * weeklyReward) / HOURS_PER_WEEK; // because we're in the middle of a current week
             totalReward += (reward * liquidity) / totalLiquidityUSDC;
             totalLiquidityUSDC -= liquidity;
         }
         delete depositTimestamps[msg.sender][tokenId];
-        require(weth.transfer(msg.sender, totalReward), "UniStaker::withdraw: transfer failed");
+        weth.transfer(msg.sender, totalReward);
         // transfer ownership back to the original LP token owner
         nonfungiblePositionManager.transferFrom(address(this), msg.sender, tokenId);
 
@@ -225,7 +229,7 @@ contract StakedUPT is ReentrancyGuard, Owned {
             totalLiquidityUSDC += liquidity;
             require(totalLiquidityUSDC <= maxTotalUSDC, "UniStaker::deposit: totalLiquidity exceed max");
         } else {
-            require(false, "UniStaker::deposit: improper token id");
+            revert UnsupportedToken();
         }
         depositTimestamps[msg.sender][tokenId] = block.timestamp;
         // transfer ownership of LP share to this contract
